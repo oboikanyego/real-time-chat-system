@@ -1,0 +1,26 @@
+<main class="shell">
+  <section class="hero">
+    <span class="eyebrow">Portfolio project foundation</span>
+    <h1>Real-Time Chat System</h1>
+    <p>Angular · Node.js · MongoDB · Firebase Authentication · Socket.IO</p>
+    <div class="actions">
+      <button type="button" (click)="checkApi()">Check API</button>
+      <span class="status" [attr.data-state]="apiState()">{{ apiLabel() }}</span>
+    </div>
+  </section>
+
+  <section class="grid">
+    <article>
+      <h2>Frontend</h2>
+      <p>Angular SPA prepared for Netlify and packaged with an Nginx Docker image for local or portable deployment.</p>
+    </article>
+    <article>
+      <h2>Backend</h2>
+      <p>Express + Socket.IO API prepared for Render Docker deployment with MongoDB, Firebase token verification and Swagger.</p>
+    </article>
+    <article>
+      <h2>Next milestone</h2>
+      <p>Implement Firebase login, user synchronization, direct conversations and persistent real-time messages.</p>
+    </article>
+  </section>
+</main>
