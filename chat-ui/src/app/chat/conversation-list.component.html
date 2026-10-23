@@ -1,0 +1,29 @@
+@if (store.loading()) {
+  <p class="state">Loading conversations…</p>
+} @else if (store.error() && store.conversations().length === 0) {
+  <p class="state error" role="alert">
+    Couldn't load conversations.
+    <button type="button" class="link" (click)="store.load()">Try again</button>
+  </p>
+} @else if (store.conversations().length === 0) {
+  <p class="state">No conversations yet. Find someone in People to start one.</p>
+} @else {
+  <ul>
+    @for (c of store.conversations(); track c.id) {
+      <li>
+        <a [routerLink]="['/chat', c.id]" routerLinkActive="active" class="row">
+          <app-avatar [name]="c.participant.displayName" [photoURL]="c.participant.photoURL" />
+          <span class="text">
+            <span class="name">{{ c.participant.displayName }}</span>
+            <span class="preview">{{ c.lastMessage?.text || 'No messages yet' }}</span>
+          </span>
+        </a>
+      </li>
+    }
+  </ul>
+  @if (store.hasMore()) {
+    <button type="button" class="more" (click)="store.loadMore()" [disabled]="store.loadingMore()">
+      {{ store.loadingMore() ? 'Loading…' : 'Load more' }}
+    </button>
+  }
+}

@@ -95,6 +95,12 @@ The API binds to `0.0.0.0` and uses Render's `PORT` variable.
 - **API:** `GET /api/v1/users?q=&page=&limit=` lists other users (never the caller), sorted by name and paginated (`limit` up to 50, `meta.hasMore`). Every word of `q` must prefix-match a word of the display name (`gra hop` finds Grace Hopper), served from an indexed `searchTokens` field. A `q` containing `@` is an exact email lookup. Responses expose only `id`, `displayName` and `photoURL`, never email or Firebase UID. `GET /api/v1/users/:id` returns one entry.
 - **UI:** the `/chat` page has a "People" panel with debounced search, loading/empty/error states, retry and "Load more". Picking a user emits an event that the conversations phase will use.
 
+## Conversations
+
+- **API:** `POST /api/v1/conversations {userId}` opens the direct conversation with another user. It is idempotent (201 when created, 200 when it already exists) and safe under concurrent requests, via a unique key built from the two sorted participant ids. `GET /api/v1/conversations` lists the caller's conversations, most recent activity first, paginated. `GET /api/v1/conversations/:id` returns one; non-participants get a 404, so ids cannot be probed. You cannot open a conversation with yourself.
+- **Visibility:** a conversation appears in someone's list once they opened it or it has messages, so being "started" by another user does not litter your list with empty chats.
+- **UI:** `/chat` is now a two-pane layout: Chats and People tabs on the left, the open conversation (`/chat/:id`, deep-linkable) on the right. Picking a person in People opens their conversation. On narrow screens only one pane shows at a time.
+
 ## Tests
 
 ```bash
@@ -103,4 +109,4 @@ cd chat-api && npm test
 
 ## Roadmap
 
-Done: foundation, authentication, user directory. Next: conversations, messaging, presence/read receipts, UI polish, deployment.
+Done: foundation, authentication, user directory, conversations. Next: messaging, presence/read receipts, UI polish, deployment.

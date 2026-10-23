@@ -23,11 +23,7 @@
     @for (user of users(); track user.id) {
       <li>
         <button type="button" class="row" [class.selected]="selectedId() === user.id" (click)="select(user)">
-          @if (user.photoURL) {
-            <img [src]="user.photoURL" alt="" referrerpolicy="no-referrer" />
-          } @else {
-            <span class="avatar" aria-hidden="true">{{ initials(user.displayName) }}</span>
-          }
+          <app-avatar [name]="user.displayName" [photoURL]="user.photoURL" />
           <span class="name">{{ user.displayName }}</span>
         </button>
       </li>

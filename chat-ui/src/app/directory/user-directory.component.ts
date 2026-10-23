@@ -3,12 +3,13 @@ import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { FormControl, ReactiveFormsModule } from '@angular/forms';
 import { EMPTY, Subject, Subscription, catchError, debounceTime, distinctUntilChanged, startWith, switchMap, tap } from 'rxjs';
 import { DirectoryService, DirectoryUser } from '../core/directory.service';
+import { AvatarComponent } from '../shared/avatar.component';
 
 /** Searchable list of other users. Emits the user the caller picks. */
 @Component({
   selector: 'app-user-directory',
   standalone: true,
-  imports: [ReactiveFormsModule],
+  imports: [ReactiveFormsModule, AvatarComponent],
   templateUrl: './user-directory.component.html',
   styleUrl: './user-directory.component.css'
 })
@@ -74,10 +75,6 @@ export class UserDirectoryComponent implements OnInit {
           this.loadMoreFailed.set(true);
         }
       });
-  }
-
-  protected initials(name: string): string {
-    return name.split(/\s+/).filter(Boolean).slice(0, 2).map((w) => w[0]!.toUpperCase()).join('');
   }
 
   private load(q: string) {

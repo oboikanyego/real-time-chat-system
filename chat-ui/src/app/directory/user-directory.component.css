@@ -5,9 +5,6 @@ ul { list-style: none; margin: 12px 0 0; padding: 0; display: grid; gap: 4px; }
 .row { display: flex; align-items: center; gap: 12px; width: 100%; padding: 8px 10px; border: 0; border-radius: 12px; background: transparent; color: inherit; text-align: left; cursor: pointer; }
 .row:hover { background: #f3f4f6; }
 .row.selected { background: #e5e7eb; }
-.avatar, img { width: 36px; height: 36px; border-radius: 50%; flex: none; }
-.avatar { display: grid; place-items: center; background: #111827; color: #fff; font-size: .8rem; font-weight: 700; }
-img { object-fit: cover; }
 .name { font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .state { margin: 16px 0 0; color: #5f6b7a; }
 .state.error { color: #991b1b; }

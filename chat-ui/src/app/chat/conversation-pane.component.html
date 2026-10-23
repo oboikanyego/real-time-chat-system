@@ -1,0 +1,24 @@
+@switch (state()) {
+  @case ('ready') {
+    @if (conversation(); as c) {
+      <header>
+        <a class="back" routerLink="/chat" aria-label="Back to conversations">‹</a>
+        <app-avatar [name]="c.participant.displayName" [photoURL]="c.participant.photoURL" />
+        <h2>{{ c.participant.displayName }}</h2>
+      </header>
+      <div class="body">
+        <p>No messages yet. Sending messages arrives in the next phase.</p>
+      </div>
+    }
+  }
+  @case ('loading') {
+    <div class="body"><p>Loading…</p></div>
+  }
+  @case ('missing') {
+    <header><a class="back" routerLink="/chat" aria-label="Back to conversations">‹</a></header>
+    <div class="body"><p role="alert">This conversation doesn't exist or you don't have access to it.</p></div>
+  }
+  @default {
+    <div class="body"><p>Select a conversation, or find someone in People to start a new one.</p></div>
+  }
+}

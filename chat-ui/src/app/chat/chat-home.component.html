@@ -1,23 +1,34 @@
-<main class="shell">
-  <header>
-    <div>
-      <span class="eyebrow">Signed in</span>
-      <h1>{{ auth.profile()?.displayName }}</h1>
-      <p>{{ auth.profile()?.email }}</p>
-    </div>
+<div class="app" [class.conversation-open]="conversationOpen()">
+  <header class="topbar">
+    <strong>Real-Time Chat</strong>
+    <span class="spacer"></span>
+    <span class="status" [attr.data-state]="socket.state()" [title]="'Connection: ' + socket.state()">
+      <i></i>{{ socket.state() }}
+    </span>
+    <span class="me">{{ auth.profile()?.displayName }}</span>
     <button type="button" (click)="logout()">Sign out</button>
   </header>
 
-  <section class="panel">
-    <h2>Connection</h2>
-    <span class="status" [attr.data-state]="socket.state()">{{ socket.state() }}</span>
-  </section>
+  <div class="layout">
+    <aside>
+      <div class="tabs" role="tablist">
+        <button type="button" role="tab" [attr.aria-selected]="tab() === 'chats'" [class.on]="tab() === 'chats'" (click)="tab.set('chats')">Chats</button>
+        <button type="button" role="tab" [attr.aria-selected]="tab() === 'people'" [class.on]="tab() === 'people'" (click)="tab.set('people')">People</button>
+      </div>
+      <div class="scroll">
+        @if (openError()) {
+          <p class="open-error" role="alert">{{ openError() }}</p>
+        }
+        @if (tab() === 'chats') {
+          <app-conversation-list />
+        } @else {
+          <app-user-directory (userSelected)="startChat($event)" />
+        }
+      </div>
+    </aside>
 
-  <section class="panel">
-    <h2>People</h2>
-    <app-user-directory (userSelected)="selected.set($event)" />
-    @if (selected(); as user) {
-      <p class="hint">Selected {{ user.displayName }} — starting conversations arrives in the next phase.</p>
-    }
-  </section>
-</main>
+    <section class="main">
+      <router-outlet />
+    </section>
+  </div>
+</div>
