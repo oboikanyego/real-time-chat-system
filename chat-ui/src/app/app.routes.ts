@@ -6,12 +6,14 @@ const pane = () => import('./chat/conversation-pane.component').then((m) => m.Co
 export const routes: Routes = [
   {
     path: 'login',
+    title: 'Sign in',
     canActivate: [guestGuard],
     data: { mode: 'login' },
     loadComponent: () => import('./auth/auth-page.component').then((m) => m.AuthPageComponent)
   },
   {
     path: 'register',
+    title: 'Create account',
     canActivate: [guestGuard],
     data: { mode: 'register' },
     loadComponent: () => import('./auth/auth-page.component').then((m) => m.AuthPageComponent)

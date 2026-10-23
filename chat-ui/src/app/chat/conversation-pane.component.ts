@@ -1,15 +1,21 @@
 import { DatePipe } from '@angular/common';
-import { Component, DestroyRef, ElementRef, HostListener, Injector, afterNextRender, computed, effect, inject, input, signal, viewChild } from '@angular/core';
+import { Component, DestroyRef, ElementRef, HostListener, Injector, afterNextRender, computed, effect, inject, input, signal, untracked, viewChild } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { RouterLink } from '@angular/router';
 import { AuthService } from '../core/auth.service';
 import { Conversation, ConversationService } from '../core/conversation.service';
 import { ChatMessage, MessageService } from '../core/message.service';
-import { idAtOrBefore, lastSeenLabel } from '../core/time';
+import { dayKey, dayLabel, idAtOrBefore, lastSeenLabel } from '../core/time';
 import { TypingService } from '../core/typing.service';
 import { AvatarComponent } from '../shared/avatar.component';
 
 const NEAR_BOTTOM_PX = 120;
+/** Messages from one person this close together read as one group. */
+const GROUP_GAP_MS = 5 * 60_000;
+
+type Row =
+  | { kind: 'day'; key: string; label: string }
+  | { kind: 'msg'; key: string; message: ChatMessage; first: boolean; last: boolean };
 
 /** Main area of the chat page. `id` comes from the route; without one it shows an empty state. */
 @Component({
@@ -56,6 +62,29 @@ export class ConversationPaneComponent {
   });
   protected readonly messages = computed(() => this.thread()?.messages ?? []);
 
+  /** Messages with day separators, and each message marked as first/last of its run from the same sender. */
+  protected readonly rows = computed<Row[]>(() => {
+    const list = this.messages();
+    const now = this.now();
+    const rows: Row[] = [];
+    list.forEach((m, i) => {
+      const prev = list[i - 1];
+      const next = list[i + 1];
+      const newDay = !prev || dayKey(prev.createdAt) !== dayKey(m.createdAt);
+      if (newDay) rows.push({ kind: 'day', key: `day-${dayKey(m.createdAt)}`, label: dayLabel(m.createdAt, now) });
+      const joins = (a: ChatMessage | undefined, b: ChatMessage | undefined) =>
+        !!a && !!b && a.senderId === b.senderId && dayKey(a.createdAt) === dayKey(b.createdAt) &&
+        Math.abs(new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()) < GROUP_GAP_MS;
+      rows.push({ kind: 'msg', key: m.clientMessageId, message: m, first: !joins(prev, m), last: !joins(m, next) });
+    });
+    return rows;
+  });
+
+  protected readonly skeletons = [0, 1, 2];
+  /** How many messages from the other person arrived while the reader was scrolled up. */
+  protected readonly newBelow = signal(0);
+  private readonly composer = viewChild<ElementRef<HTMLTextAreaElement>>('composer');
+
   @HostListener('document:visibilitychange')
   @HostListener('window:focus')
   @HostListener('window:blur')
@@ -76,38 +105,49 @@ export class ConversationPaneComponent {
       if (id && this.state() === 'ready' && this.active()) this.messageStore.markRead(id);
     });
 
+    // Runs only when the route's conversation id changes. Everything else is untracked: the store calls below
+    // read signals (the conversation list), and tracking them would reset this view and the draft on every incoming message.
     effect(() => {
       const id = this.id();
-      this.draft = '';
-      if (!id) {
-        this.state.set('idle');
-        this.fetched.set(null);
-        return;
-      }
-      this.state.set('loading');
-      void this.conversations.get(id).then((found) => {
-        // Ignore a response for a conversation the user has already navigated away from.
-        if (this.id() !== id) return;
-        this.fetched.set(found);
-        this.state.set(found ? 'ready' : 'missing');
-        if (found) {
-          void this.messageStore.loadLatest(id).then(() => this.scrollToBottom());
-        }
-      });
+      untracked(() => this.openConversation(id));
     });
 
     // Follow new messages when the reader is already at the bottom, or when they sent it themselves.
     let lastKey = '';
+    let lastMessageId = '';
     effect(() => {
       const list = this.messages();
       const last = list[list.length - 1];
       const key = `${this.id()}|${last?.clientMessageId}|${last?.status}`;
       if (key === lastKey || !last) return;
       const firstRender = !lastKey.startsWith(`${this.id()}|`);
+      const isNew = last.clientMessageId !== lastMessageId;
       lastKey = key;
-      const el = this.scroller()?.nativeElement;
-      const nearBottom = !el || el.scrollHeight - el.scrollTop - el.clientHeight < NEAR_BOTTOM_PX;
-      if (firstRender || nearBottom || last.senderId === this.me()?.id) this.scrollToBottom();
+      lastMessageId = last.clientMessageId;
+      if (firstRender || this.nearBottom() || this.isMine(last)) this.scrollToBottom();
+      else if (isNew) this.newBelow.update((n) => n + 1);
+    });
+  }
+
+  private openConversation(id: string | undefined): void {
+    this.draft = '';
+    if (!id) {
+      this.state.set('idle');
+      this.fetched.set(null);
+      return;
+    }
+    this.state.set('loading');
+    void this.conversations.get(id).then((found) => {
+      // Ignore a response for a conversation the user has already navigated away from.
+      if (this.id() !== id) return;
+      this.fetched.set(found);
+      this.state.set(found ? 'ready' : 'missing');
+      if (found) {
+        this.newBelow.set(0);
+        // Keyboard users can type straight away; on touch screens focusing would pop the keyboard open.
+        if (matchMedia('(pointer: fine)').matches) afterNextRender(() => this.composer()?.nativeElement.focus(), { injector: this.injector });
+        void this.messageStore.loadLatest(id).then(() => this.scrollToBottom());
+      }
     });
   }
 
@@ -170,7 +210,22 @@ export class ConversationPaneComponent {
     afterNextRender(() => (el.scrollTop += el.scrollHeight - before), { injector: this.injector });
   }
 
+  private nearBottom(): boolean {
+    const el = this.scroller()?.nativeElement;
+    return !el || el.scrollHeight - el.scrollTop - el.clientHeight < NEAR_BOTTOM_PX;
+  }
+
+  protected onScroll(): void {
+    if (this.newBelow() > 0 && this.nearBottom()) this.newBelow.set(0);
+  }
+
+  protected jumpToLatest(): void {
+    this.newBelow.set(0);
+    this.scrollToBottom();
+  }
+
   private scrollToBottom(): void {
+    this.newBelow.set(0);
     afterNextRender(
       () => {
         const el = this.scroller()?.nativeElement;

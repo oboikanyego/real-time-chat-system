@@ -1,9 +1,11 @@
 <div class="search">
+  <label class="sr-only" for="people-search">Search people</label>
   <input
+    id="people-search"
+    class="input"
     type="search"
     [formControl]="query"
     placeholder="Search people by name, or an exact email"
-    aria-label="Search people"
     autocomplete="off"
     maxlength="100"
   />
@@ -12,14 +14,18 @@
 @if (error()) {
   <p class="state error" role="alert">
     Couldn't load people.
-    <button type="button" class="link" (click)="retry()">Try again</button>
+    <button type="button" class="link-btn" (click)="retry()">Try again</button>
   </p>
 } @else if (loading()) {
-  <p class="state">Searching…</p>
+  <div class="skeletons" role="status" aria-label="Searching">
+    @for (i of [0, 1, 2]; track i) {
+      <div class="sk-row"><span class="skeleton sk-avatar"></span><span class="skeleton sk-line"></span></div>
+    }
+  </div>
 } @else if (users().length === 0) {
-  <p class="state">{{ query.value.trim() ? 'No one matches that search.' : 'No other users have joined yet.' }}</p>
+  <p class="state" role="status">{{ query.value.trim() ? 'No one matches that search.' : 'No other users have joined yet.' }}</p>
 } @else {
-  <ul>
+  <ul aria-label="People">
     @for (user of users(); track user.id) {
       <li>
         <button type="button" class="row" [class.selected]="selectedId() === user.id" (click)="select(user)">
@@ -30,7 +36,7 @@
     }
   </ul>
   @if (hasMore()) {
-    <button type="button" class="more" (click)="loadMore()" [disabled]="loadingMore()">
+    <button type="button" class="btn secondary more" (click)="loadMore()" [disabled]="loadingMore()">
       {{ loadingMore() ? 'Loading…' : loadMoreFailed() ? 'Couldn\'t load more — try again' : 'Load more' }}
     </button>
   }

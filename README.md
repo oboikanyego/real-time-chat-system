@@ -117,6 +117,15 @@ The API binds to `0.0.0.0` and uses Render's `PORT` variable.
 - **Typing:** "typing…" appears in the header and the list while the other person types; it is throttled on the sender's side and expires on its own if the sender goes quiet.
 - **Limits:** presence state lives in the memory of one API instance (fine for the single Render service; multiple instances would need Redis).
 
+## UI polish
+
+- **Theming:** all colours are CSS variables in `chat-ui/src/styles.css`. Light and dark themes follow the system setting by default; the sun/moon/monitor button in the top bar cycles system, light and dark and remembers the choice. The saved theme is applied before first paint, so there is no flash.
+- **Accessibility:** the app has landmarks, a single `h1`, a "Skip to conversation" link, properly wired tabs (arrow keys, Home and End), a live message log, labelled form fields with associated errors, visible focus rings, reduced-motion support and 44 px touch targets on touch screens. The login, chat, dark-mode and profile screens pass an axe-core scan (WCAG 2 A/AA plus best practices) with no violations.
+- **Conversation view:** day separators ("Today", "Yesterday", weekday), runs of messages from one person grouped together, a "N new messages" pill when you are scrolled up, skeleton loaders, friendly empty states, and a banner when the connection drops ("You're offline", "Reconnecting…", or a prompt to sign in again if the session expired).
+- **Profile:** click your name in the top bar to change your display name (`PATCH /api/v1/me`).
+- **Mobile:** uses dynamic viewport height and safe-area insets, shows one pane at a time, and does not auto-focus the composer on touch screens (that would open the keyboard).
+- **Other:** coloured avatars, last-message time in the list, route-based page titles, favicon and theme-color.
+
 ## Tests
 
 ```bash
@@ -125,4 +134,4 @@ cd chat-api && npm test
 
 ## Roadmap
 
-Done: foundation, authentication, user directory, conversations, messaging, presence and read receipts. Next: UI polish, deployment.
+Done: foundation, authentication, user directory, conversations, messaging, presence and read receipts, UI polish. Next: deployment.

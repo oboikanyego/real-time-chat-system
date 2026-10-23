@@ -41,6 +41,8 @@ export class SocketService {
   private hasConnected = false;
 
   readonly state = signal<SocketState>('disconnected');
+  /** True once the first connection succeeded; used to tell "still connecting" from "lost the connection". */
+  readonly everConnected = signal(false);
 
   /** Server pushes. */
   readonly messageNew$ = new Subject<ServerMessage>();
@@ -60,6 +62,7 @@ export class SocketService {
     });
     this.socket.on('system:ready', () => {
       this.state.set('connected');
+      this.everConnected.set(true);
       if (this.hasConnected) this.reconnected$.next();
       this.hasConnected = true;
     });
@@ -110,6 +113,7 @@ export class SocketService {
     this.socket?.disconnect();
     this.socket = null;
     this.hasConnected = false;
+    this.everConnected.set(false);
     this.state.set('disconnected');
   }
 }

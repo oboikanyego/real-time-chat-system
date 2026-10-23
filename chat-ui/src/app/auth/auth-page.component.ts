@@ -32,6 +32,7 @@ export class AuthPageComponent {
 
   protected readonly isRegister = computed(() => this.mode() === 'register');
   protected readonly busy = signal(false);
+  protected readonly showPassword = signal(false);
   protected readonly error = signal('');
 
   protected readonly form = this.fb.nonNullable.group({

@@ -1,34 +1,77 @@
+<a class="skip" href="#conversation" (click)="skipToConversation($event)">Skip to conversation</a>
+
 <div class="app" [class.conversation-open]="conversationOpen()">
   <header class="topbar">
-    <strong>Real-Time Chat</strong>
+    <h1 class="brand">
+      <svg viewBox="0 0 64 64" width="26" height="26" aria-hidden="true"><rect width="64" height="64" rx="16" fill="#4f46e5"/><path d="M18 20a6 6 0 0 1 6-6h16a6 6 0 0 1 6 6v14a6 6 0 0 1-6 6H31l-9 8v-8a6 6 0 0 1-4-5.6z" fill="#fff"/></svg>
+      <span>Real-Time Chat</span>
+    </h1>
     <span class="spacer"></span>
-    <span class="status" [attr.data-state]="socket.state()" [title]="'Connection: ' + socket.state()">
-      <i></i>{{ socket.state() }}
+
+    <span class="status" role="status" [attr.data-state]="socket.state()">
+      <i aria-hidden="true"></i><span class="status-text">{{ socket.state() }}</span>
     </span>
-    <span class="me">{{ auth.profile()?.displayName }}</span>
-    <button type="button" (click)="logout()">Sign out</button>
+
+    <button type="button" class="btn ghost icon" (click)="theme.cycle()" [attr.aria-label]="themeLabel()" [title]="themeLabel()">
+      @switch (theme.preference()) {
+        @case ('light') {
+          <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/></svg>
+        }
+        @case ('dark') {
+          <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z"/></svg>
+        }
+        @default {
+          <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="4" width="18" height="12" rx="2"/><path d="M8 20h8M12 16v4"/></svg>
+        }
+      }
+    </button>
+
+    @if (auth.profile()) {
+      @let me = auth.profile()!;
+      <button type="button" class="btn ghost user" (click)="openProfile()" aria-haspopup="dialog">
+        <app-avatar [name]="me.displayName" [photoURL]="me.photoURL" style="--avatar-size: 28px" />
+        <span class="me">{{ me.displayName }}</span>
+        <span class="sr-only">Edit profile</span>
+      </button>
+    }
+    <button type="button" class="btn secondary" (click)="logout()">Sign out</button>
   </header>
 
+  @if (banner(); as b) {
+    <div class="banner" [attr.data-kind]="b.kind" role="status">
+      {{ b.text }}
+      @if (b.kind === 'error') {
+        <button type="button" class="link-btn" (click)="logout()">Sign in</button>
+      }
+    </div>
+  }
+
   <div class="layout">
-    <aside>
-      <div class="tabs" role="tablist">
-        <button type="button" role="tab" [attr.aria-selected]="tab() === 'chats'" [class.on]="tab() === 'chats'" (click)="tab.set('chats')">Chats</button>
-        <button type="button" role="tab" [attr.aria-selected]="tab() === 'people'" [class.on]="tab() === 'people'" (click)="tab.set('people')">People</button>
+    <aside aria-label="Conversations and people">
+      <div class="tabs" role="tablist" aria-label="Sidebar" (keydown)="onTabKey($event)">
+        <button type="button" role="tab" id="tab-chats" aria-controls="panel-chats" [attr.aria-selected]="tab() === 'chats'" [attr.tabindex]="tab() === 'chats' ? 0 : -1" [class.on]="tab() === 'chats'" (click)="tab.set('chats')">Chats</button>
+        <button type="button" role="tab" id="tab-people" aria-controls="panel-people" [attr.aria-selected]="tab() === 'people'" [attr.tabindex]="tab() === 'people' ? 0 : -1" [class.on]="tab() === 'people'" (click)="tab.set('people')">People</button>
       </div>
       <div class="scroll">
         @if (openError()) {
           <p class="open-error" role="alert">{{ openError() }}</p>
         }
         @if (tab() === 'chats') {
-          <app-conversation-list />
+          <div role="tabpanel" id="panel-chats" aria-labelledby="tab-chats">
+            <app-conversation-list (findPeople)="tab.set('people')" />
+          </div>
         } @else {
-          <app-user-directory (userSelected)="startChat($event)" />
+          <div role="tabpanel" id="panel-people" aria-labelledby="tab-people">
+            <app-user-directory (userSelected)="startChat($event)" />
+          </div>
         }
       </div>
     </aside>
 
-    <section class="main">
+    <main class="main" id="conversation" tabindex="-1" #main>
       <router-outlet />
-    </section>
+    </main>
   </div>
 </div>
+
+<app-profile-dialog />

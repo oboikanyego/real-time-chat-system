@@ -19,3 +19,35 @@ export function lastSeenLabel(lastSeenAt: string | null, now = new Date()): stri
 /** Message ids are fixed-width hex ObjectIds, so string order is their order. */
 export const idAtOrBefore = (id: string | null, cursor: string | null): boolean => !!id && !!cursor && id <= cursor;
 export const laterId = (a: string | null, b: string | null): string | null => (!a ? b : !b ? a : a > b ? a : b);
+
+const weekdayFmt = new Intl.DateTimeFormat(undefined, { weekday: 'long' });
+const longDateFmt = new Intl.DateTimeFormat(undefined, { weekday: 'long', month: 'long', day: 'numeric' });
+
+const daysAgo = (then: Date, now: Date) => Math.round((startOfDay(now) - startOfDay(then)) / 86_400_000);
+
+/** Separator above a day's messages: "Today", "Yesterday", "Monday" (this week) or "Monday, March 4". */
+export function dayLabel(iso: string, now = new Date()): string {
+  const then = new Date(iso);
+  const days = daysAgo(then, now);
+  if (days === 0) return 'Today';
+  if (days === 1) return 'Yesterday';
+  if (days > 1 && days < 7) return weekdayFmt.format(then);
+  return longDateFmt.format(then);
+}
+
+/** Short time for the conversation list: "3:04 PM", "Yesterday", "Mon" or "Mar 4". */
+export function listTime(iso: string | null, now = new Date()): string {
+  if (!iso) return '';
+  const then = new Date(iso);
+  const days = daysAgo(then, now);
+  if (days === 0) return timeFmt.format(then);
+  if (days === 1) return 'Yesterday';
+  if (days > 1 && days < 7) return new Intl.DateTimeFormat(undefined, { weekday: 'short' }).format(then);
+  return dateFmt.format(then);
+}
+
+/** Calendar-day key used to start a new day group. */
+export const dayKey = (iso: string): string => {
+  const d = new Date(iso);
+  return `${d.getFullYear()}-${d.getMonth()}-${d.getDate()}`;
+};

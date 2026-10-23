@@ -1,35 +1,54 @@
 @if (store.loading()) {
-  <p class="state">Loading conversations…</p>
+  <div class="skeletons" role="status" aria-label="Loading conversations">
+    @for (i of skeletonRows; track i) {
+      <div class="sk-row">
+        <span class="skeleton sk-avatar"></span>
+        <span class="sk-lines"><span class="skeleton sk-line"></span><span class="skeleton sk-line short"></span></span>
+      </div>
+    }
+  </div>
 } @else if (store.error() && store.conversations().length === 0) {
   <p class="state error" role="alert">
     Couldn't load conversations.
-    <button type="button" class="link" (click)="store.load()">Try again</button>
+    <button type="button" class="link-btn" (click)="store.load()">Try again</button>
   </p>
 } @else if (store.conversations().length === 0) {
-  <p class="state">No conversations yet. Find someone in People to start one.</p>
+  <div class="empty">
+    <svg viewBox="0 0 48 48" width="44" height="44" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M8 12a4 4 0 0 1 4-4h24a4 4 0 0 1 4 4v16a4 4 0 0 1-4 4H22l-9 8v-8h-1a4 4 0 0 1-4-4z"/><path d="M17 18h14M17 24h8"/></svg>
+    <p><strong>No conversations yet</strong></p>
+    <p>Find someone to start your first chat.</p>
+    <button type="button" class="btn" (click)="findPeople.emit()">Find people</button>
+  </div>
 } @else {
-  <ul>
+  <ul aria-label="Conversations">
     @for (c of store.conversations(); track c.id) {
       <li>
-        <a [routerLink]="['/chat', c.id]" routerLinkActive="active" class="row">
+        <a [routerLink]="['/chat', c.id]" routerLinkActive="active" ariaCurrentWhenActive="page" class="row">
           <app-avatar [name]="c.participant.displayName" [photoURL]="c.participant.photoURL" [online]="!!c.participant.presence?.online" />
           <span class="text">
-            <span class="name" [class.unread]="c.unreadCount > 0">{{ c.participant.displayName }}</span>
-            @if (typing.isTyping(c.id)) {
-              <span class="preview typing">typing…</span>
-            } @else {
-              <span class="preview" [class.unread]="c.unreadCount > 0">{{ c.lastMessage?.text || 'No messages yet' }}</span>
-            }
+            <span class="top">
+              <span class="name" [class.unread]="c.unreadCount > 0">{{ c.participant.displayName }}</span>
+              @if (c.lastMessageAt) {
+                <time class="when" [attr.datetime]="c.lastMessageAt">{{ listTime(c.lastMessageAt) }}</time>
+              }
+            </span>
+            <span class="bottom">
+              @if (typing.isTyping(c.id)) {
+                <span class="preview typing">typing…</span>
+              } @else {
+                <span class="preview" [class.unread]="c.unreadCount > 0">{{ c.lastMessage?.text || 'No messages yet' }}</span>
+              }
+              @if (c.unreadCount > 0) {
+                <span class="badge"><span class="sr-only">{{ c.unreadCount }} unread</span><span aria-hidden="true">{{ badge(c.unreadCount) }}</span></span>
+              }
+            </span>
           </span>
-          @if (c.unreadCount > 0) {
-            <span class="badge" [attr.aria-label]="c.unreadCount + ' unread messages'">{{ badge(c.unreadCount) }}</span>
-          }
         </a>
       </li>
     }
   </ul>
   @if (store.hasMore()) {
-    <button type="button" class="more" (click)="store.loadMore()" [disabled]="store.loadingMore()">
+    <button type="button" class="btn secondary more" (click)="store.loadMore()" [disabled]="store.loadingMore()">
       {{ store.loadingMore() ? 'Loading…' : 'Load more' }}
     </button>
   }

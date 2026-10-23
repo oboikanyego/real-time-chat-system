@@ -4,8 +4,22 @@
     <meta charset="utf-8">
     <title>Real-Time Chat</title>
     <base href="/">
-    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
     <meta name="description" content="Angular and Socket.IO real-time chat system">
+    <meta name="theme-color" content="#f6f7fb" media="(prefers-color-scheme: light)">
+    <meta name="theme-color" content="#0b1020" media="(prefers-color-scheme: dark)">
+    <link rel="icon" type="image/svg+xml" href="favicon.svg">
+    <script>
+      // Apply the saved or system theme before first paint so there is no flash of the wrong one.
+      (function () {
+        try {
+          var pref = localStorage.getItem('chat.theme');
+          var dark = pref === 'dark' || ((pref === null || pref === 'system') && matchMedia('(prefers-color-scheme: dark)').matches);
+          document.documentElement.dataset.theme = dark ? 'dark' : 'light';
+          document.documentElement.style.colorScheme = dark ? 'dark' : 'light';
+        } catch (e) {}
+      })();
+    </script>
   </head>
   <body>
     <app-root></app-root>

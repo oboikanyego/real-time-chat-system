@@ -1,8 +1,12 @@
 @switch (state()) {
   @case ('ready') {
-    @if (conversation(); as c) {
+    @if (conversation()) {
+      <!-- `@if (x; as c)` would rebuild this whole view (scroll position, composer focus) whenever x changes; @let does not. -->
+      @let c = conversation()!;
       <header>
-        <a class="back" routerLink="/chat" aria-label="Back to conversations">‹</a>
+        <a class="back" routerLink="/chat" aria-label="Back to conversations">
+          <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m15 18-6-6 6-6"/></svg>
+        </a>
         <app-avatar [name]="c.participant.displayName" [photoURL]="c.participant.photoURL" [online]="subtitle().kind === 'online' || subtitle().kind === 'typing'" />
         <div class="who">
           <h2>{{ c.participant.displayName }}</h2>
@@ -12,72 +16,109 @@
         </div>
       </header>
 
-      <div class="scroller" #scroller>
-        @if (thread()?.loading) {
-          <p class="note">Loading messages…</p>
-        } @else if (thread()?.loadError && messages().length === 0) {
-          <p class="note error" role="alert">
-            Couldn't load messages. <button type="button" class="link" (click)="reload()">Try again</button>
-          </p>
-        } @else {
-          @if (thread()?.hasMore) {
-            <button type="button" class="earlier" (click)="loadEarlier()" [disabled]="thread()?.loadingEarlier">
-              {{ thread()?.loadingEarlier ? 'Loading…' : 'Load earlier messages' }}
-            </button>
-          }
-          @if (messages().length === 0) {
-            <p class="note">No messages yet. Say hello to {{ c.participant.displayName }}.</p>
-          }
-          <ol class="messages" aria-live="polite">
-            @for (m of messages(); track m.clientMessageId) {
-              <li class="msg" [class.mine]="isMine(m)" [class.failed]="m.status === 'failed'">
-                <div class="bubble">{{ m.text }}</div>
-                <div class="meta">
-                  @switch (m.status) {
-                    @case ('sending') { <span>Sending…</span> }
-                    @case ('failed') {
-                      <span class="fail">{{ m.error || "Couldn't send" }}</span>
-                      <button type="button" class="link" (click)="retry(m)">Retry</button>
-                    }
-                    @default {
-                      <time [attr.datetime]="m.createdAt">{{ m.createdAt | date: 'shortTime' }}</time>
-                      @if (isMine(m)) {
-                        @let r = receipt(m);
-                        <span class="ticks" [attr.data-state]="r" [attr.aria-label]="r">{{ r === 'sent' ? '✓' : '✓✓' }}</span>
-                      }
-                    }
-                  }
-                </div>
-              </li>
+      <div class="thread">
+        <div class="scroller" #scroller (scroll)="onScroll()" role="log" aria-label="Messages with {{ c.participant.displayName }}" aria-relevant="additions text" tabindex="0">
+          @if (thread()?.loading || !thread()) {
+            <div class="skeletons" role="status" aria-label="Loading messages">
+              @for (i of skeletons; track i) {
+                <span class="skeleton sk-bubble" [class.mine]="i === 1"></span>
+              }
+            </div>
+          } @else if (thread()?.loadError && messages().length === 0) {
+            <p class="note error" role="alert">
+              Couldn't load messages. <button type="button" class="link-btn" (click)="reload()">Try again</button>
+            </p>
+          } @else {
+            @if (thread()?.hasMore) {
+              <button type="button" class="btn secondary earlier" (click)="loadEarlier()" [disabled]="thread()?.loadingEarlier">
+                {{ thread()?.loadingEarlier ? 'Loading…' : 'Load earlier messages' }}
+              </button>
             }
-          </ol>
+            @if (messages().length === 0) {
+              <div class="empty">
+                <app-avatar [name]="c.participant.displayName" [photoURL]="c.participant.photoURL" style="--avatar-size: 64px" />
+                <p><strong>{{ c.participant.displayName }}</strong></p>
+                <p>No messages yet. Say hello.</p>
+              </div>
+            }
+            <ol class="messages">
+              @for (row of rows(); track row.key) {
+                @if (row.kind === 'day') {
+                  <li class="day"><span>{{ row.label }}</span></li>
+                } @else {
+                  @let m = row.message;
+                  <li class="msg" [class.mine]="isMine(m)" [class.failed]="m.status === 'failed'" [class.first]="row.first" [class.last]="row.last">
+                    <div class="bubble"><span class="sr-only">{{ isMine(m) ? 'You' : c.participant.displayName }}: </span>{{ m.text }}</div>
+                    @if (row.last || m.status !== 'sent') {
+                      <div class="meta">
+                        @switch (m.status) {
+                          @case ('sending') { <span>Sending…</span> }
+                          @case ('failed') {
+                            <span class="fail">{{ m.error || "Couldn't send" }}</span>
+                            <button type="button" class="link-btn" (click)="retry(m)">Retry</button>
+                          }
+                          @default {
+                            <time [attr.datetime]="m.createdAt">{{ m.createdAt | date: 'shortTime' }}</time>
+                            @if (isMine(m)) {
+                              @let r = receipt(m);
+                              <span class="ticks" role="img" [attr.data-state]="r" [attr.aria-label]="r">{{ r === 'sent' ? '✓' : '✓✓' }}</span>
+                            }
+                          }
+                        }
+                      </div>
+                    }
+                  </li>
+                }
+              }
+            </ol>
+          }
+        </div>
+        @if (newBelow() > 0) {
+          <button type="button" class="btn pill" (click)="jumpToLatest()">
+            {{ newBelow() === 1 ? '1 new message' : newBelow() + ' new messages' }}
+            <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 5v14M5 12l7 7 7-7"/></svg>
+          </button>
         }
       </div>
 
       <form class="composer" (submit)="submit($event)">
+        <label class="sr-only" for="composer">Message {{ c.participant.displayName }}</label>
         <textarea
+          id="composer" #composer
           name="draft"
+          class="input"
           rows="1"
           maxlength="2000"
           placeholder="Write a message"
-          aria-label="Message"
+          enterkeyhint="send"
+          aria-describedby="composer-hint"
           [(ngModel)]="draft"
           (input)="onInput()"
           (blur)="stopTyping()"
           (keydown.enter)="onEnter($event)"
         ></textarea>
-        <button type="submit" [disabled]="!draft.trim()">Send</button>
+        <span id="composer-hint" class="sr-only">Press Enter to send, Shift and Enter for a new line.</span>
+        <button type="submit" class="btn" [disabled]="!draft.trim()">
+          Send
+          <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m22 2-11 11M22 2l-7 20-4-9-9-4z"/></svg>
+        </button>
       </form>
     }
   }
   @case ('loading') {
-    <div class="center"><p>Loading…</p></div>
+    <div class="center" role="status"><p>Loading…</p></div>
   }
   @case ('missing') {
-    <header><a class="back" routerLink="/chat" aria-label="Back to conversations">‹</a></header>
+    <header><a class="back" routerLink="/chat" aria-label="Back to conversations">
+      <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m15 18-6-6 6-6"/></svg>
+    </a></header>
     <div class="center"><p role="alert">This conversation doesn't exist or you don't have access to it.</p></div>
   }
   @default {
-    <div class="center"><p>Select a conversation, or find someone in People to start a new one.</p></div>
+    <div class="center">
+      <svg viewBox="0 0 48 48" width="52" height="52" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M8 12a4 4 0 0 1 4-4h24a4 4 0 0 1 4 4v16a4 4 0 0 1-4 4H22l-9 8v-8h-1a4 4 0 0 1-4-4z"/><path d="M17 18h14M17 24h8"/></svg>
+      <p><strong>Select a conversation</strong></p>
+      <p>Pick a chat on the left, or find someone in People to start a new one.</p>
+    </div>
   }
 }

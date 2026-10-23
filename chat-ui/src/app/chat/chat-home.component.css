@@ -1,24 +1,41 @@
-:host { display: block; height: 100vh; }
-.app { display: flex; flex-direction: column; height: 100%; }
-.topbar { display: flex; align-items: center; gap: 14px; padding: 12px 20px; background: #fff; border-bottom: 1px solid #e5e7eb; }
+:host { display: block; height: 100vh; height: 100dvh; }
+.app { display: flex; flex-direction: column; height: 100%; padding-left: env(safe-area-inset-left); padding-right: env(safe-area-inset-right); }
+.skip { position: absolute; left: 8px; top: -48px; z-index: 10; padding: 8px 14px; border-radius: var(--radius-sm); background: var(--accent); color: var(--accent-contrast); font-weight: 600; text-decoration: none; transition: top .15s; }
+.skip:focus { top: 8px; }
+
+.topbar { display: flex; align-items: center; gap: 8px; padding: calc(8px + env(safe-area-inset-top)) 16px 8px; background: var(--surface); border-bottom: 1px solid var(--border); }
+.brand { display: flex; align-items: center; gap: 10px; font-size: 1.05rem; font-weight: 700; letter-spacing: -.01em; }
 .spacer { flex: 1; }
-.me { font-weight: 600; }
-button { border: 0; border-radius: 10px; padding: 8px 14px; font: inherit; font-weight: 700; background: #111827; color: #fff; cursor: pointer; }
-.status { display: inline-flex; align-items: center; gap: 6px; font-size: .8rem; color: #5f6b7a; }
+.me { max-width: 160px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 600; }
+.user { padding-left: 6px; }
+
+.status { display: inline-flex; align-items: center; gap: 6px; margin-right: 4px; font-size: .8rem; color: var(--text-muted); text-transform: capitalize; }
 .status i { width: 8px; height: 8px; border-radius: 50%; background: #f59e0b; }
 .status[data-state='connected'] i { background: #22c55e; }
 .status[data-state='unauthorized'] i, .status[data-state='disconnected'] i { background: #ef4444; }
-.layout { flex: 1; display: grid; grid-template-columns: 340px 1fr; min-height: 0; }
-aside { display: flex; flex-direction: column; min-height: 0; background: #fff; border-right: 1px solid #e5e7eb; }
-.tabs { display: grid; grid-template-columns: 1fr 1fr; gap: 4px; padding: 12px 12px 0; }
-.tabs button { background: #f3f4f6; color: #374151; }
-.tabs button.on { background: #111827; color: #fff; }
+
+.banner { display: flex; align-items: center; justify-content: center; gap: 10px; padding: 8px 16px; font-size: .9rem; font-weight: 500; }
+.banner[data-kind='warn'] { background: var(--warning-bg); color: var(--warning-text); }
+.banner[data-kind='error'] { background: var(--danger-bg); color: var(--danger); }
+
+.layout { flex: 1; display: grid; grid-template-columns: minmax(300px, 360px) 1fr; min-height: 0; }
+aside { display: flex; flex-direction: column; min-height: 0; background: var(--surface); border-right: 1px solid var(--border); }
+.tabs { display: grid; grid-template-columns: 1fr 1fr; gap: 4px; margin: 12px 12px 0; padding: 4px; border-radius: 12px; background: var(--surface-2); }
+.tabs button { min-height: 36px; border: 0; border-radius: 9px; background: transparent; color: var(--text-muted); font-weight: 600; cursor: pointer; }
+.tabs button:hover { color: var(--text); }
+.tabs button.on { background: var(--surface); color: var(--text); box-shadow: 0 1px 3px rgba(15, 23, 42, .15); }
 .scroll { flex: 1; overflow-y: auto; padding: 12px; }
-.open-error { margin: 0 0 10px; padding: 10px 12px; border-radius: 10px; background: #fee2e2; color: #991b1b; font-size: .9rem; }
-.main { min-width: 0; min-height: 0; background: rgba(255, 255, 255, .6); }
+.open-error { margin: 0 0 10px; padding: 10px 12px; border-radius: var(--radius-sm); background: var(--danger-bg); color: var(--danger); font-size: .9rem; }
+.main { min-width: 0; min-height: 0; background: var(--bg); outline: none; }
+
 @media (max-width: 760px) {
   .layout { grid-template-columns: 1fr; }
   .app.conversation-open aside { display: none; }
   .app:not(.conversation-open) .main { display: none; }
+  .topbar { padding-left: 12px; padding-right: 12px; }
   .me { display: none; }
+  .status-text { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+  .status { margin-right: 0; }
 }
+/* Narrow phones: keep the app name for screen readers (the h1) but give the space to the controls. */
+@media (max-width: 400px) { .brand span { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; } }
