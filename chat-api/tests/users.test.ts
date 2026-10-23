@@ -102,3 +102,23 @@ describe('toDirectoryEntry', () => {
     expect(entry).toEqual({ id: '7', displayName: 'A', photoURL: null });
   });
 });
+
+describe('operational endpoints', () => {
+  it('/health is a liveness probe that never touches the database', async () => {
+    const res = await request(app).get('/health');
+    expect(res.status).toBe(200);
+    expect(res.body.status).toBe('ok');
+  });
+
+  it('/ready reports 503 until the database is connected', async () => {
+    const res = await request(app).get('/ready');
+    expect(res.status).toBe(503);
+    expect(res.body).toEqual({ status: 'unavailable', database: 'down' });
+  });
+
+  it('does not log or expose the framework', async () => {
+    const res = await request(app).get('/health');
+    expect(res.headers['x-powered-by']).toBeUndefined();
+    expect(res.headers['x-content-type-options']).toBe('nosniff');
+  });
+});

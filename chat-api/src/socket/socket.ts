@@ -1,6 +1,7 @@
 import type { Server as HttpServer } from 'http';
 import { Server, type Socket } from 'socket.io';
 import { env } from '../config/env';
+import { logger } from '../config/logger';
 import { resolveIdentity, UnauthorizedError } from '../auth/identity';
 import { AppError } from '../middleware/error';
 import { sendMessage, socketSendSchema } from '../services/message.service';
@@ -11,7 +12,6 @@ import { createPresenceTracker, setPresenceTracker } from './presence';
 import { emitToUser, personalRoom, setRealtimeServer } from './realtime';
 
 const WINDOW_MS = 10_000;
-const PRESENCE_GRACE_MS = 5_000;
 
 type Ack = (response: { ok: true; [key: string]: unknown } | { ok: false; error: { code: string; message: string } }) => void;
 
@@ -34,7 +34,7 @@ function respond(ack: unknown, run: () => Promise<Record<string, unknown>>): Pro
     (data) => reply({ ok: true, ...data }),
     (error) => {
       if (error instanceof AppError) return reply({ ok: false, error: { code: error.code, message: error.message } });
-      console.error('[socket] handler failed', error);
+      logger.error({ err: error }, 'socket handler failed');
       return reply({ ok: false, error: { code: 'INTERNAL_ERROR', message: 'Unexpected server error.' } });
     }
   );
@@ -84,7 +84,7 @@ function registerHandlers(socket: Socket) {
       }
       emitToUser(peer, 'typing:update', { conversationId, userId: String(me()), typing });
     } catch (error) {
-      console.error('[socket] typing relay failed', error);
+      logger.error({ err: error }, 'typing relay failed');
     }
   };
   socket.on('typing:start', relayTyping(true));
@@ -99,9 +99,9 @@ export function createSocketServer(httpServer: HttpServer, options: { presenceGr
   setRealtimeServer(io);
 
   const presence = createPresenceTracker({
-    graceMs: options.presenceGraceMs ?? PRESENCE_GRACE_MS,
-    onOnline: (id) => void announceOnline(id).catch((e) => console.error('[presence] online broadcast failed', e)),
-    onOffline: (id) => void announceOffline(id).catch((e) => console.error('[presence] offline update failed', e))
+    graceMs: options.presenceGraceMs ?? env.presenceGraceMs,
+    onOnline: (id) => void announceOnline(id).catch((e) => logger.error({ err: e }, 'presence online broadcast failed')),
+    onOffline: (id) => void announceOffline(id).catch((e) => logger.error({ err: e }, 'presence offline update failed'))
   });
   setPresenceTracker(presence);
 
@@ -127,7 +127,7 @@ export function createSocketServer(httpServer: HttpServer, options: { presenceGr
     presence.connect(profileId, socket.id);
     socket.on('disconnect', () => presence.disconnect(profileId, socket.id));
     // Anything sent while this user had no socket counts as delivered now.
-    void markPendingDelivered(socket.data.profileId).catch((e) => console.error('[receipts] pending delivery failed', e));
+    void markPendingDelivered(socket.data.profileId).catch((e) => logger.error({ err: e }, 'pending delivery failed'));
 
     socket.emit('system:ready', { socketId: socket.id, firebaseUid: uid });
   });

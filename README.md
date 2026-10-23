@@ -6,82 +6,57 @@ A portfolio-grade real-time chat platform using Angular, Node.js/Express, MongoD
 
 ```text
 real-time-chat-system/
-├── chat-ui/              # Angular frontend (Netlify)
-├── chat-api/             # Node.js + Express + Socket.IO API (Render Docker service)
-├── docs/                 # BRD and technical design source documents
-├── docker-compose.yml    # Local full-stack environment
+├── chat-ui/              # Angular frontend (Netlify, or nginx in Docker)
+├── chat-api/             # Node.js + Express + Socket.IO API (Render, or Docker)
+├── docs/                 # BRD, technical design and DEPLOYMENT.md
+├── docker-compose.yml    # Local full stack: MongoDB + API + UI
+├── .github/workflows/    # CI: tests, real-MongoDB integration tests, Docker build
 ├── netlify.toml          # Netlify build configuration
 └── render.yaml           # Render Blueprint for the API
 ```
 
-## Local development with Docker
+## Run it locally
 
-1. Copy `chat-api/.env.example` to `chat-api/.env` if you want to provide Firebase credentials.
-2. Run:
+### With Docker (nothing else to install)
 
 ```bash
 docker compose up --build
 ```
 
-Then open:
+Then open <http://localhost:4200>. With no Firebase configured you get a username-only development login, so open two
+browser windows, sign in as two different names and chat. Also available: API health at <http://localhost:3000/health>,
+Swagger at <http://localhost:3000/api-docs>. All ports are bound to `127.0.0.1` because the development login trusts a
+header and must not be reachable from other machines. To use real Firebase locally, copy `.env.example` to `.env`.
 
-- UI: `http://localhost:4200`
-- API health: `http://localhost:3000/health`
-- Swagger: `http://localhost:3000/api-docs`
-- MongoDB: `mongodb://localhost:27017`
-
-The initial foundation can boot without Firebase credentials, but authenticated chat features require a Firebase project before implementation of the authentication phase.
-
-## Local development without Docker
-
-### API
+### Without Docker
 
 ```bash
-cd chat-api
-npm install
-npm run dev
+# terminal 1: needs a MongoDB on localhost:27017 (e.g. `docker run -p 27017:27017 mongo:7`)
+cd chat-api && cp .env.example .env && npm install && npm run dev
+
+# terminal 2
+cd chat-ui && npm install && npm start      # http://localhost:4200
 ```
 
-### UI
+## Deploying
 
-```bash
-cd chat-ui
-npm install
-npm start
-```
+The UI goes to Netlify, the API to Render (Docker), the database to MongoDB Atlas, and sign-in is Firebase Authentication.
+**[docs/DEPLOYMENT.md](docs/DEPLOYMENT.md)** is the step-by-step guide (accounts, environment variables, the order to do
+things in, a post-deploy smoke test and troubleshooting). In short:
 
-## Deployment
+1. MongoDB Atlas: create a free cluster and a database user, and allow network access.
+2. Firebase: enable Email/Password and Google sign-in, copy the web config and generate a service-account key.
+3. Render: create a Blueprint from `render.yaml`, then set `MONGODB_URI`, `CLIENT_ORIGIN` and the `FIREBASE_*` secrets.
+4. Netlify: import the repo and set `CHAT_API_URL` and the `FIREBASE_*` web config. The build fails with a clear message if any is missing.
+5. Run `npm run smoke -- <api-url> <ui-url>` in `chat-api` to check the deployment from the outside.
 
-### Netlify - Angular UI
+## Operations
 
-The root `netlify.toml` sets `chat-ui` as the build base. Configure these Netlify environment variables before production deploy:
-
-- `CHAT_API_URL=https://<your-render-service>.onrender.com`
-- `CHAT_SOCKET_URL=https://<your-render-service>.onrender.com`
-- `FIREBASE_API_KEY`
-- `FIREBASE_AUTH_DOMAIN`
-- `FIREBASE_PROJECT_ID`
-- `FIREBASE_STORAGE_BUCKET`
-- `FIREBASE_MESSAGING_SENDER_ID`
-- `FIREBASE_APP_ID`
-
-### Render - Node.js API
-
-`render.yaml` configures `chat-api` as a Docker web service. Set the secret environment variables in Render:
-
-- `MONGODB_URI` (MongoDB Atlas connection string)
-- `CLIENT_ORIGIN` (your Netlify production URL)
-- `FIREBASE_PROJECT_ID`
-- `FIREBASE_CLIENT_EMAIL`
-- `FIREBASE_PRIVATE_KEY`
-
-The API binds to `0.0.0.0` and uses Render's `PORT` variable.
-
-## Documentation
-
-- `docs/BRD.md` - Business Requirements Document source
-- `docs/TECHNICAL_DESIGN.md` - system architecture, data model, REST API and Socket.IO contracts
-- DOCX versions are included in the project package and supplied separately.
+- **Health:** `GET /health` (liveness, used by Render) and `GET /ready` (also checks the database).
+- **Logs:** one JSON line per event (pino), with authorization headers and query strings never logged.
+- **Safe by default in production:** the API refuses to start with the development login, without an explicit `CLIENT_ORIGIN`, or with a malformed Firebase key; it trusts exactly one proxy hop so rate limiting sees real client addresses; and it shuts down gracefully on SIGTERM.
+- **Browser security:** the UI is served with a Content-Security-Policy generated from your API and Firebase settings, plus the usual headers (nosniff, frame denial, referrer and permissions policies).
+- **CI:** every push runs typecheck, unit tests, the UI build, integration tests against a real MongoDB, and a Docker Compose smoke test. Render deploys only after these checks pass.
 
 ## Authentication
 
@@ -129,9 +104,20 @@ The API binds to `0.0.0.0` and uses Render's `PORT` variable.
 ## Tests
 
 ```bash
-cd chat-api && npm test
+cd chat-api
+npm test                  # 113 unit tests; the database is mocked
+npm run test:integration  # 19 end-to-end checks against a running API and a real MongoDB (see below)
+npm run smoke -- <api-url> [ui-origin]   # post-deploy checks against any running API
+```
+
+The integration tests need a MongoDB and the API running in development mode, for example:
+
+```bash
+docker run -d -p 27017:27017 mongo:7
+cd chat-api && MONGODB_URI=mongodb://localhost:27017/chat_it AUTH_MODE=development PRESENCE_GRACE_MS=400 npm run dev &
+npm run test:integration
 ```
 
 ## Roadmap
 
-Done: foundation, authentication, user directory, conversations, messaging, presence and read receipts, UI polish. Next: deployment.
+All planned phases are complete: foundation, authentication, user directory, conversations, messaging, presence and read receipts, UI polish, deployment.

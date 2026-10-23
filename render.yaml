@@ -1,20 +1,28 @@
+# Render Blueprint for the API. The UI is deployed separately on Netlify (see netlify.toml).
+# Full walkthrough, including the order to do things in: docs/DEPLOYMENT.md
 services:
   - type: web
     name: real-time-chat-api
     runtime: docker
+    plan: free # free instances sleep after ~15 min idle; the first request then takes up to a minute
     dockerfilePath: ./chat-api/Dockerfile
     dockerContext: ./chat-api
-    healthCheckPath: /health
-    autoDeployTrigger: commit
+    healthCheckPath: /health # liveness only; /ready also checks the database
+    autoDeployTrigger: checksPass # deploy only commits whose GitHub checks (.github/workflows/ci.yml) pass
     maxShutdownDelaySeconds: 30
     envVars:
       - key: NODE_ENV
         value: production
       - key: AUTH_MODE
         value: firebase
-      - key: MONGODB_URI
+      - key: TRUST_PROXY # Render puts exactly one proxy in front of the service
+        value: "1"
+      - key: LOG_LEVEL
+        value: info
+      # Secrets and per-environment values: set these in the Render dashboard (they are never stored in git).
+      - key: MONGODB_URI # MongoDB Atlas connection string, with the database name, e.g. .../realtime_chat
         sync: false
-      - key: CLIENT_ORIGIN
+      - key: CLIENT_ORIGIN # exact Netlify URL, no trailing slash, e.g. https://your-app.netlify.app
         sync: false
       - key: FIREBASE_PROJECT_ID
         sync: false

@@ -1,9 +1,15 @@
+# Local full stack: MongoDB + API + UI.
+#   docker compose up --build            development login, no Firebase needed
+#   copy .env.example to .env and fill it in to run against a real Firebase project instead
+#
+# Ports are bound to 127.0.0.1 on purpose: the development login trusts a request header, so the API must not be
+# reachable from other machines on your network.
 services:
   mongo:
-    image: mongo:7
+    image: ${MONGO_IMAGE:-mongo:7}
     restart: unless-stopped
     ports:
-      - "27017:27017"
+      - "127.0.0.1:27017:27017"
     volumes:
       - mongo-data:/data/db
     healthcheck:
@@ -16,15 +22,21 @@ services:
     build:
       context: ./chat-api
       dockerfile: Dockerfile
+      args:
+        NODE_IMAGE: ${NODE_IMAGE:-node:22-alpine}
     restart: unless-stopped
     environment:
-      NODE_ENV: development
+      # "development" enables the header-based dev login and pretty errors; the API refuses AUTH_MODE=development in production.
+      NODE_ENV: ${API_NODE_ENV:-development}
       PORT: 3000
       MONGODB_URI: mongodb://mongo:27017/realtime_chat
       CLIENT_ORIGIN: http://localhost:4200
-      AUTH_MODE: development
+      AUTH_MODE: ${AUTH_MODE:-development}
+      FIREBASE_PROJECT_ID: ${FIREBASE_PROJECT_ID:-}
+      FIREBASE_CLIENT_EMAIL: ${FIREBASE_CLIENT_EMAIL:-}
+      FIREBASE_PRIVATE_KEY: ${FIREBASE_PRIVATE_KEY:-}
     ports:
-      - "3000:3000"
+      - "127.0.0.1:3000:3000"
     depends_on:
       mongo:
         condition: service_healthy
@@ -34,13 +46,23 @@ services:
       context: ./chat-ui
       dockerfile: Dockerfile
       args:
+        NODE_IMAGE: ${NODE_IMAGE:-node:22-alpine}
+        NGINX_IMAGE: ${NGINX_IMAGE:-nginx:1.27-alpine}
         CHAT_API_URL: http://localhost:3000
         CHAT_SOCKET_URL: http://localhost:3000
+        # Empty = development login. Set all of these (see .env.example) to use Firebase.
+        FIREBASE_API_KEY: ${FIREBASE_API_KEY:-}
+        FIREBASE_AUTH_DOMAIN: ${FIREBASE_AUTH_DOMAIN:-}
+        FIREBASE_PROJECT_ID: ${FIREBASE_PROJECT_ID:-}
+        FIREBASE_STORAGE_BUCKET: ${FIREBASE_STORAGE_BUCKET:-}
+        FIREBASE_MESSAGING_SENDER_ID: ${FIREBASE_MESSAGING_SENDER_ID:-}
+        FIREBASE_APP_ID: ${FIREBASE_APP_ID:-}
     restart: unless-stopped
     ports:
-      - "4200:80"
+      - "127.0.0.1:4200:80"
     depends_on:
-      - api
+      api:
+        condition: service_healthy
 
 volumes:
   mongo-data:

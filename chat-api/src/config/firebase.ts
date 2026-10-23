@@ -17,3 +17,8 @@ export function firebaseAuth() {
 
   return getAuth();
 }
+
+/** Called once at startup so a malformed service-account key stops the deploy instead of failing every login. */
+export function assertFirebaseConfigured(): void {
+  if (env.authMode === 'firebase') firebaseAuth();
+}

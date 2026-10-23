@@ -7,8 +7,8 @@
     "start": "ng serve --host 0.0.0.0 --port 4200",
     "build": "ng build",
     "write-env": "node scripts/write-env.mjs",
-    "build:netlify": "npm run write-env && ng build --configuration production",
-    "build:docker": "npm run write-env && ng build --configuration production"
+    "build:netlify": "node scripts/write-env.mjs --require-firebase && ng build --configuration production",
+    "build:docker": "node scripts/write-env.mjs && ng build --configuration production"
   },
   "engines": {
     "node": ">=20.19.0"

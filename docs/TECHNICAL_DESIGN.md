@@ -36,4 +36,14 @@ Each conversation stores per-user cursors, `cursors[userId] = {deliveredUpTo, re
 A user is online while at least one socket is connected; going offline waits 5 s so a page reload does not flash offline, and then stores `lastSeenAt`. Presence is shared only between people who have exchanged a message, so opening a chat with someone does not let you watch them. State is held per API instance; scaling beyond one instance needs a shared store (for example the Socket.IO Redis adapter plus a presence set).
 
 ## Deployment
-Netlify builds `chat-ui`. Render builds `chat-api/Dockerfile` using `render.yaml`. Production database is MongoDB Atlas. Local `docker compose up --build` runs MongoDB, API and Nginx-hosted Angular UI.
+Production runs the UI on Netlify, the API as a Docker service on Render, the database on MongoDB Atlas, and sign-in on Firebase Authentication. `docker compose up --build` runs MongoDB, API and the nginx-hosted UI locally, with a development login. The full walkthrough, environment variable reference and troubleshooting are in `docs/DEPLOYMENT.md`.
+
+Design decisions:
+- **Images:** the API image is multi-stage (build, production dependencies, runtime), runs as a non-root user and has a liveness health check. The UI image is a static nginx with the CSP generated at build time from the API and Firebase settings.
+- **Health:** `/health` is liveness (never touches the database, so a database outage does not restart a healthy process); `/ready` reports database connectivity.
+- **Fail fast:** in production the API refuses to start with the development login, without an explicit `CLIENT_ORIGIN`, or with an unparsable Firebase key, and the database connection times out after 10 s.
+- **Proxy:** `TRUST_PROXY` (default 1 in production) makes rate limiting see real client addresses behind the platform proxy.
+- **Shutdown:** SIGTERM closes WebSocket clients, then the database, within 10 s.
+- **Logging:** pino JSON lines; headers and query strings are not logged.
+- **CI:** GitHub Actions runs typecheck, unit tests, the UI build, integration tests against a real MongoDB service container, and a Docker Compose smoke test. Render deploys only commits whose checks pass (`autoDeployTrigger: checksPass`).
+- **Scaling limit:** presence, typing relays and per-socket rate limits are in process memory. More than one API instance needs the Socket.IO Redis adapter and a shared presence store.

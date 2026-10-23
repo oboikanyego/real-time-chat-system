@@ -2,6 +2,7 @@ import Joi from 'joi';
 import { Types } from 'mongoose';
 import { Conversation } from '../models/conversation.model';
 import { Message } from '../models/message.model';
+import { logger } from '../config/logger';
 import { AppError } from '../middleware/error';
 import { hasSocket } from '../socket/presence';
 import { emitToUser } from '../socket/realtime';
@@ -62,7 +63,7 @@ export async function sendMessage(callerId: Types.ObjectId, conversationId: stri
   }
 
   // The message is already stored; a failed broadcast must not turn the send into an error the client would retry.
-  await publishNewMessage(conversation, stored).catch((error) => console.error('[messages] broadcast failed', error));
+  await publishNewMessage(conversation, stored).catch((error) => logger.error({ err: error }, 'message broadcast failed'));
   return { message: toMessageView(stored), duplicate: false };
 }
 

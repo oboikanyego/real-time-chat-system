@@ -1,11 +1,15 @@
+# Netlify builds the Angular UI. Set the variables listed in docs/DEPLOYMENT.md in the Netlify site settings
+# (CHAT_API_URL and FIREBASE_*); the build stops with a clear message if any are missing.
 [build]
   base = "chat-ui"
   command = "npm run build:netlify"
   publish = "dist/chat-ui/browser"
 
 [build.environment]
-  NODE_VERSION = "20.19.0"
+  NODE_VERSION = "22"
 
+# Single-page app: every path is served by index.html and routed client-side.
+# Security headers (CSP etc.) and caching rules are generated into the build by scripts/write-env.mjs (public/_headers).
 [[redirects]]
   from = "/*"
   to = "/index.html"

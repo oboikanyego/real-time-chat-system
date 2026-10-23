@@ -33,6 +33,8 @@ export class AuthPageComponent {
   protected readonly isRegister = computed(() => this.mode() === 'register');
   protected readonly busy = signal(false);
   protected readonly showPassword = signal(false);
+  /** True when a sign-in has been pending a while: a free-tier API that was asleep needs up to a minute to wake. */
+  protected readonly slow = signal(false);
   protected readonly error = signal('');
 
   protected readonly form = this.fb.nonNullable.group({
@@ -72,7 +74,9 @@ export class AuthPageComponent {
 
   private async run(action: () => Promise<void>): Promise<void> {
     this.busy.set(true);
+    this.slow.set(false);
     this.error.set('');
+    const slowTimer = setTimeout(() => this.slow.set(true), 6000);
     try {
       await action();
       // Login flows resolve once Firebase has signed in; wait for the profile sync.
@@ -82,6 +86,8 @@ export class AuthPageComponent {
       const code = (e as { code?: string }).code ?? '';
       this.error.set(FIREBASE_MESSAGES[code] ?? 'Could not sign in. Please try again.');
     } finally {
+      clearTimeout(slowTimer);
+      this.slow.set(false);
       this.busy.set(false);
     }
   }

@@ -81,6 +81,12 @@
       </p>
     }
 
+    <div aria-live="polite">
+      @if (slow()) {
+        <p class="notice slow">Still working. The server may be waking up after being idle, which can take up to a minute.</p>
+      }
+    </div>
+
     <div aria-live="assertive">
       @if (error()) {
         <p class="error" role="alert">{{ error() }}</p>
