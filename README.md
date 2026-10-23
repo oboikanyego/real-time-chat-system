@@ -83,6 +83,19 @@ The API binds to `0.0.0.0` and uses Render's `PORT` variable.
 - `docs/TECHNICAL_DESIGN.md` - system architecture, data model, REST API and Socket.IO contracts
 - DOCX versions are included in the project package and supplied separately.
 
-## Initial milestone
+## Authentication
 
-This first commit intentionally establishes architecture and deployment foundations only. The implementation phases are authentication, user directory, conversations, messaging, presence/read receipts, UI polish, tests and deployment.
+- **UI:** `/login` and `/register` (email/password and Google) via Firebase Auth; `/chat` is guarded and shows the signed-in profile and Socket.IO connection state. Sign out clears the session.
+- **API:** `GET /api/v1/me` verifies the Firebase ID token, creates the MongoDB profile on first sign-in and returns it; `PATCH /api/v1/me` updates the display name. The Socket.IO handshake uses the same token (`auth.token`).
+- **Without Firebase:** with `AUTH_MODE=development` on the API (never honoured when `NODE_ENV=production`) and an empty Firebase config in the UI, the login page shows a username-only dev sign-in. The username is sent as `X-Dev-User` (and `auth.devUser` on the socket), so several local users can be simulated in separate browser sessions.
+- **With Firebase:** enable Email/Password and Google providers in the Firebase console, put the web app config in `chat-ui/src/environments/environment.ts` (or the Netlify variables), and set `AUTH_MODE=firebase` plus the service-account variables on the API.
+
+## Tests
+
+```bash
+cd chat-api && npm test
+```
+
+## Roadmap
+
+Done: foundation, authentication. Next: user directory, conversations, messaging, presence/read receipts, UI polish, deployment.

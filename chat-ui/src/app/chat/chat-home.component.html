@@ -1,0 +1,16 @@
+<main class="shell">
+  <header>
+    <div>
+      <span class="eyebrow">Signed in</span>
+      <h1>{{ auth.profile()?.displayName }}</h1>
+      <p>{{ auth.profile()?.email }}</p>
+    </div>
+    <button type="button" (click)="logout()">Sign out</button>
+  </header>
+
+  <section class="panel">
+    <h2>Connection</h2>
+    <span class="status" [attr.data-state]="socket.state()">{{ socket.state() }}</span>
+    <p>Conversations and messaging are coming in the next phases.</p>
+  </section>
+</main>

@@ -1,0 +1,55 @@
+<main class="auth">
+  <section class="card">
+    <h1>{{ isRegister() ? 'Create your account' : 'Welcome back' }}</h1>
+    <p class="sub">Real-Time Chat System</p>
+
+    @if (auth.devMode) {
+      <p class="notice">Firebase is not configured — using development sign-in.</p>
+      <form [formGroup]="devForm" (ngSubmit)="devSubmit()" novalidate>
+        <label>Username
+          <input formControlName="name" autocomplete="username" placeholder="alice" />
+        </label>
+        @if (devForm.controls.name.touched && devForm.controls.name.invalid) {
+          <span class="field-error">Use letters, numbers, - or _ (max 32).</span>
+        }
+        <button type="submit" [disabled]="busy()">Continue</button>
+      </form>
+    } @else {
+      <button type="button" class="google" (click)="google()" [disabled]="busy()">Continue with Google</button>
+      <div class="divider"><span>or</span></div>
+
+      <form [formGroup]="form" (ngSubmit)="submit()" novalidate>
+        @if (isRegister()) {
+          <label>Name
+            <input formControlName="name" autocomplete="name" />
+          </label>
+        }
+        <label>Email
+          <input type="email" formControlName="email" autocomplete="email" />
+        </label>
+        @if (form.controls.email.touched && form.controls.email.invalid) {
+          <span class="field-error">Enter a valid email address.</span>
+        }
+        <label>Password
+          <input type="password" formControlName="password" [attr.autocomplete]="isRegister() ? 'new-password' : 'current-password'" />
+        </label>
+        @if (form.controls.password.touched && form.controls.password.invalid) {
+          <span class="field-error">Password must be at least 6 characters.</span>
+        }
+        <button type="submit" [disabled]="busy()">{{ isRegister() ? 'Create account' : 'Sign in' }}</button>
+      </form>
+
+      <p class="switch">
+        @if (isRegister()) {
+          Already have an account? <a routerLink="/login">Sign in</a>
+        } @else {
+          New here? <a routerLink="/register">Create an account</a>
+        }
+      </p>
+    }
+
+    @if (error()) {
+      <p class="error" role="alert">{{ error() }}</p>
+    }
+  </section>
+</main>

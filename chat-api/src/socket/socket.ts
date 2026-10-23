@@ -1,7 +1,7 @@
 import type { Server as HttpServer } from 'http';
 import { Server } from 'socket.io';
 import { env } from '../config/env';
-import { firebaseAuth } from '../config/firebase';
+import { resolveIdentity } from '../auth/identity';
 
 export function createSocketServer(httpServer: HttpServer) {
   const io = new Server(httpServer, {
@@ -11,15 +11,8 @@ export function createSocketServer(httpServer: HttpServer) {
 
   io.use(async (socket, next) => {
     try {
-      if (env.authMode === 'development' && env.nodeEnv !== 'production') {
-        socket.data.user = { firebaseUid: 'dev-user', email: 'dev@example.com' };
-        return next();
-      }
-
-      const token = socket.handshake.auth?.token;
-      if (!token) return next(new Error('UNAUTHORIZED'));
-      const decoded = await firebaseAuth()!.verifyIdToken(token);
-      socket.data.user = { firebaseUid: decoded.uid, email: decoded.email };
+      const { token, devUser } = socket.handshake.auth ?? {};
+      socket.data.user = await resolveIdentity(token, devUser);
       return next();
     } catch {
       return next(new Error('UNAUTHORIZED'));

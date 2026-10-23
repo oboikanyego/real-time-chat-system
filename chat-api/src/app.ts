@@ -5,7 +5,8 @@ import helmet from 'helmet';
 import swaggerUi from 'swagger-ui-express';
 import { env } from './config/env';
 import { openApiDocument } from './docs/openapi';
-import { requireAuth } from './middleware/auth';
+import { errorHandler } from './middleware/error';
+import { meRouter } from './routes/me.routes';
 
 export function createApp() {
   const app = express();
@@ -16,9 +17,10 @@ export function createApp() {
   app.use(rateLimit({ windowMs: 60_000, limit: 240, standardHeaders: 'draft-7', legacyHeaders: false }));
 
   app.get('/health', (_req, res) => res.status(200).json({ status: 'ok', service: 'real-time-chat-api' }));
-  app.get('/api/v1/me', requireAuth, (req, res) => res.json({ success: true, data: req.user }));
+  app.use('/api/v1/me', meRouter);
   app.use('/api-docs', swaggerUi.serve, swaggerUi.setup(openApiDocument));
 
   app.use((_req, res) => res.status(404).json({ success: false, error: { code: 'NOT_FOUND', message: 'Route not found.' } }));
+  app.use(errorHandler);
   return app;
 }
