@@ -22,8 +22,9 @@ export const openApiDocument = {
   openapi: '3.0.3',
   info: {
     title: 'Real-Time Chat API',
-    version: '0.4.0',
-    description: 'REST contract for the Real-Time Chat System. Protected endpoints require a Firebase ID token.'
+    version: '0.5.0',
+    description:
+      'REST contract for the Real-Time Chat System. Protected endpoints require a Firebase ID token. Real-time events (message:send, message:new, conversation:updated) are documented in docs/TECHNICAL_DESIGN.md.'
   },
   servers: [{ url: '/' }],
   paths: {
@@ -116,6 +117,53 @@ export const openApiDocument = {
         }
       }
     },
+    '/api/v1/conversations/{id}/messages': {
+      get: {
+        summary: 'Message history (newest page by default, returned oldest-first)',
+        description: 'Pass `before` (a message id) to fetch the page of older messages.',
+        security: [{ bearerAuth: [] }],
+        parameters: [
+          { name: 'id', in: 'path', required: true, schema: { type: 'string' } },
+          { name: 'before', in: 'query', schema: { type: 'string' } },
+          { name: 'limit', in: 'query', schema: { type: 'integer', minimum: 1, maximum: 100, default: 30 } }
+        ],
+        responses: {
+          '200': { description: 'Messages', content: { 'application/json': { schema: { $ref: '#/components/schemas/MessagePage' } } } },
+          '400': errorResponse,
+          '401': errorResponse,
+          '404': errorResponse
+        }
+      },
+      post: {
+        summary: 'Send a text message (REST fallback for the message:send socket event)',
+        description: 'Idempotent on clientMessageId: 201 when stored, 200 when that id was already stored.',
+        security: [{ bearerAuth: [] }],
+        parameters: [{ name: 'id', in: 'path', required: true, schema: { type: 'string' } }],
+        requestBody: {
+          required: true,
+          content: {
+            'application/json': {
+              schema: {
+                type: 'object',
+                required: ['clientMessageId', 'text'],
+                properties: {
+                  clientMessageId: { type: 'string', minLength: 8, maxLength: 64, description: 'Sender-generated unique id' },
+                  text: { type: 'string', minLength: 1, maxLength: 2000 }
+                }
+              }
+            }
+          }
+        },
+        responses: {
+          '200': { description: 'Already stored', content: { 'application/json': { schema: { $ref: '#/components/schemas/MessageEnvelope' } } } },
+          '201': { description: 'Stored', content: { 'application/json': { schema: { $ref: '#/components/schemas/MessageEnvelope' } } } },
+          '400': errorResponse,
+          '401': errorResponse,
+          '404': errorResponse,
+          '409': errorResponse
+        }
+      }
+    },
     '/api/v1/me': {
       get: {
         summary: 'Sign in: validate the token, create the profile on first use and return it',
@@ -205,6 +253,29 @@ export const openApiDocument = {
           success: { type: 'boolean', example: true },
           data: { type: 'array', items: { $ref: '#/components/schemas/Conversation' } },
           meta: { type: 'object', properties: { page: { type: 'integer' }, limit: { type: 'integer' }, hasMore: { type: 'boolean' } } }
+        }
+      },
+      Message: {
+        type: 'object',
+        properties: {
+          id: { type: 'string' },
+          conversationId: { type: 'string' },
+          senderId: { type: 'string' },
+          clientMessageId: { type: 'string' },
+          text: { type: 'string' },
+          createdAt: { type: 'string', format: 'date-time' }
+        }
+      },
+      MessageEnvelope: {
+        type: 'object',
+        properties: { success: { type: 'boolean', example: true }, data: { $ref: '#/components/schemas/Message' } }
+      },
+      MessagePage: {
+        type: 'object',
+        properties: {
+          success: { type: 'boolean', example: true },
+          data: { type: 'array', items: { $ref: '#/components/schemas/Message' } },
+          meta: { type: 'object', properties: { limit: { type: 'integer' }, hasMore: { type: 'boolean' } } }
         }
       },
       ProfileEnvelope: {

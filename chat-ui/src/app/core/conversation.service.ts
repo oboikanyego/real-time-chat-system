@@ -3,6 +3,7 @@ import { Injectable, inject, signal } from '@angular/core';
 import { firstValueFrom } from 'rxjs';
 import { environment } from '../../environments/environment';
 import { DirectoryUser } from './directory.service';
+import { SocketService } from './socket.service';
 
 export interface Conversation {
   id: string;
@@ -21,10 +22,24 @@ interface Page {
 const PAGE_SIZE = 30;
 const base = `${environment.apiUrl}/api/v1/conversations`;
 
+/** Same order as the API: most recent message first; conversations without messages last. */
+function precedes(a: Conversation, b: Conversation): boolean {
+  if (a.lastMessageAt && b.lastMessageAt) return a.lastMessageAt > b.lastMessageAt;
+  return !!a.lastMessageAt && !b.lastMessageAt;
+}
+
+/** Puts one conversation in its place; among equals the newest arrival goes first. */
+function place(list: Conversation[], conversation: Conversation): Conversation[] {
+  const rest = list.filter((c) => c.id !== conversation.id);
+  const at = rest.findIndex((c) => !precedes(c, conversation));
+  return at === -1 ? [...rest, conversation] : [...rest.slice(0, at), conversation, ...rest.slice(at)];
+}
+
 /** Client-side store for the caller's conversation list. */
 @Injectable({ providedIn: 'root' })
 export class ConversationService {
   private readonly http = inject(HttpClient);
+  private readonly socket = inject(SocketService);
   private page = 1;
 
   readonly conversations = signal<Conversation[]>([]);
@@ -32,6 +47,13 @@ export class ConversationService {
   readonly loadingMore = signal(false);
   readonly error = signal(false);
   readonly hasMore = signal(false);
+
+  constructor() {
+    // A new message makes the conversation appear (for the recipient) or move up and update its preview.
+    this.socket.conversationUpdated$.subscribe((c) => this.conversations.update((list) => place(list, c)));
+    // Missed updates while disconnected are recovered by reloading the first page.
+    this.socket.reconnected$.subscribe(() => void this.refresh());
+  }
 
   async load(): Promise<void> {
     this.loading.set(true);
@@ -66,7 +88,8 @@ export class ConversationService {
   /** Opens (or creates) the direct conversation with a user and puts it at the top of the list. */
   async open(userId: string): Promise<Conversation> {
     const res = await firstValueFrom(this.http.post<{ data: Conversation }>(base, { userId }));
-    this.conversations.update((list) => [res.data, ...list.filter((c) => c.id !== res.data.id)]);
+    // Keep what the list already knows (e.g. the last message) if the conversation is present.
+    this.conversations.update((list) => (list.some((c) => c.id === res.data.id) ? list : place(list, res.data)));
     return res.data;
   }
 
@@ -78,6 +101,16 @@ export class ConversationService {
       return (await firstValueFrom(this.http.get<{ data: Conversation }>(`${base}/${id}`))).data;
     } catch {
       return null;
+    }
+  }
+
+  /** Reloads the first page without flashing the loading state, keeping anything already on screen. */
+  private async refresh(): Promise<void> {
+    try {
+      const res = await this.fetchPage(1);
+      this.conversations.update((list) => res.data.reduce(place, list));
+    } catch {
+      /* keep the current list; the next event or reload will correct it */
     }
   }
 

@@ -6,19 +6,65 @@
         <app-avatar [name]="c.participant.displayName" [photoURL]="c.participant.photoURL" />
         <h2>{{ c.participant.displayName }}</h2>
       </header>
-      <div class="body">
-        <p>No messages yet. Sending messages arrives in the next phase.</p>
+
+      <div class="scroller" #scroller>
+        @if (thread()?.loading) {
+          <p class="note">Loading messages…</p>
+        } @else if (thread()?.loadError && messages().length === 0) {
+          <p class="note error" role="alert">
+            Couldn't load messages. <button type="button" class="link" (click)="reload()">Try again</button>
+          </p>
+        } @else {
+          @if (thread()?.hasMore) {
+            <button type="button" class="earlier" (click)="loadEarlier()" [disabled]="thread()?.loadingEarlier">
+              {{ thread()?.loadingEarlier ? 'Loading…' : 'Load earlier messages' }}
+            </button>
+          }
+          @if (messages().length === 0) {
+            <p class="note">No messages yet. Say hello to {{ c.participant.displayName }}.</p>
+          }
+          <ol class="messages" aria-live="polite">
+            @for (m of messages(); track m.clientMessageId) {
+              <li class="msg" [class.mine]="isMine(m)" [class.failed]="m.status === 'failed'">
+                <div class="bubble">{{ m.text }}</div>
+                <div class="meta">
+                  @switch (m.status) {
+                    @case ('sending') { <span>Sending…</span> }
+                    @case ('failed') {
+                      <span class="fail">{{ m.error || "Couldn't send" }}</span>
+                      <button type="button" class="link" (click)="retry(m)">Retry</button>
+                    }
+                    @default { <time [attr.datetime]="m.createdAt">{{ m.createdAt | date: 'shortTime' }}</time> }
+                  }
+                </div>
+              </li>
+            }
+          </ol>
+        }
       </div>
+
+      <form class="composer" (submit)="submit($event)">
+        <textarea
+          name="draft"
+          rows="1"
+          maxlength="2000"
+          placeholder="Write a message"
+          aria-label="Message"
+          [(ngModel)]="draft"
+          (keydown.enter)="onEnter($event)"
+        ></textarea>
+        <button type="submit" [disabled]="!draft.trim()">Send</button>
+      </form>
     }
   }
   @case ('loading') {
-    <div class="body"><p>Loading…</p></div>
+    <div class="center"><p>Loading…</p></div>
   }
   @case ('missing') {
     <header><a class="back" routerLink="/chat" aria-label="Back to conversations">‹</a></header>
-    <div class="body"><p role="alert">This conversation doesn't exist or you don't have access to it.</p></div>
+    <div class="center"><p role="alert">This conversation doesn't exist or you don't have access to it.</p></div>
   }
   @default {
-    <div class="body"><p>Select a conversation, or find someone in People to start a new one.</p></div>
+    <div class="center"><p>Select a conversation, or find someone in People to start a new one.</p></div>
   }
 }

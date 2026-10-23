@@ -52,3 +52,9 @@ export function toProfile(user: UserRecord) {
     createdAt: user.createdAt
   };
 }
+
+/** Profile _id for an authenticated identity; creates the profile if the user has not signed in through /me yet. */
+export async function resolveProfileId(identity: AuthenticatedUser) {
+  const existing = await User.findOne({ firebaseUid: identity.firebaseUid }, { _id: 1 }).lean();
+  return existing?._id ?? (await syncUser(identity))._id;
+}

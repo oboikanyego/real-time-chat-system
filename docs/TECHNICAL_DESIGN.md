@@ -14,5 +14,10 @@ Health, current user/profile, user search, conversation list/create/read, pagina
 ## Socket.IO contract
 Handshake auth token; authenticated personal room; authorized conversation rooms; `message:send`, `message:new`, `message:delivered`, `message:read`, `message:status`, `typing:start`, `typing:stop`, `typing:update`, `presence:update`, `conversation:updated`, and `system:error`.
 
+### Implemented messaging contract
+- `message:send` (client to server): `{conversationId, clientMessageId, text}` with an acknowledgement callback returning `{ok: true, message, duplicate}` or `{ok: false, error: {code, message}}`. Error codes: `VALIDATION_ERROR`, `CONVERSATION_NOT_FOUND`, `RATE_LIMITED`, `CLIENT_MESSAGE_ID_REUSED`, `INTERNAL_ERROR`.
+- `message:new` `{message}` and `conversation:updated` `{conversation}` (server to client) go to each participant's personal room `user:<profileId>`.
+- Messages are unique on `(senderId, clientMessageId)` and indexed on `(conversationId, _id desc)` for history paging. Per-recipient delivery/read receipts and unread counts are not implemented yet.
+
 ## Deployment
 Netlify builds `chat-ui`. Render builds `chat-api/Dockerfile` using `render.yaml`. Production database is MongoDB Atlas. Local `docker compose up --build` runs MongoDB, API and Nginx-hosted Angular UI.

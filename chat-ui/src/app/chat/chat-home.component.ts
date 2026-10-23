@@ -5,6 +5,7 @@ import { map } from 'rxjs';
 import { AuthService } from '../core/auth.service';
 import { ConversationService } from '../core/conversation.service';
 import { DirectoryUser } from '../core/directory.service';
+import { MessageService } from '../core/message.service';
 import { SocketService } from '../core/socket.service';
 import { UserDirectoryComponent } from '../directory/user-directory.component';
 import { ConversationListComponent } from './conversation-list.component';
@@ -21,6 +22,7 @@ export class ChatHomeComponent implements OnInit, OnDestroy {
   protected readonly auth = inject(AuthService);
   protected readonly socket = inject(SocketService);
   private readonly conversations = inject(ConversationService);
+  private readonly messages = inject(MessageService);
   private readonly router = inject(Router);
 
   protected readonly tab = signal<'chats' | 'people'>('chats');
@@ -54,6 +56,7 @@ export class ChatHomeComponent implements OnInit, OnDestroy {
   protected async logout(): Promise<void> {
     this.socket.disconnect();
     this.conversations.reset();
+    this.messages.reset();
     await this.auth.logout();
     await this.router.navigateByUrl('/login');
   }

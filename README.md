@@ -101,6 +101,14 @@ The API binds to `0.0.0.0` and uses Render's `PORT` variable.
 - **Visibility:** a conversation appears in someone's list once they opened it or it has messages, so being "started" by another user does not litter your list with empty chats.
 - **UI:** `/chat` is now a two-pane layout: Chats and People tabs on the left, the open conversation (`/chat/:id`, deep-linkable) on the right. Picking a person in People opens their conversation. On narrow screens only one pane shows at a time.
 
+## Messaging
+
+- **Sending:** the UI emits `message:send {conversationId, clientMessageId, text}` over the socket and gets an acknowledgement, `{ok: true, message, duplicate}` or `{ok: false, error: {code, message}}`. If the socket is down or no acknowledgement arrives within 8 s, it falls back to `POST /api/v1/conversations/:id/messages`. Both paths share one service, so a message is stored once: `clientMessageId` is unique per sender, and a retry returns the stored message instead of a second copy.
+- **Receiving:** after storing, the API pushes `message:new` and `conversation:updated` (each recipient's own view, with the other person inlined) to every connected tab of both participants. A new conversation therefore appears in the recipient's list the moment the first message arrives.
+- **History:** `GET /api/v1/conversations/:id/messages?before=<messageId>&limit=` returns pages newest-first by message id, delivered oldest-first; the UI loads the latest 30 and "Load earlier messages" pages backwards.
+- **Safety:** the sender is always the authenticated user, never a payload field; text is trimmed, 1-2000 characters, and rendered as plain text; only participants can read or send (others get 404); each socket is limited to 20 sends per 10 s.
+- **Resilience:** unconfirmed messages show "Sending…" or "Failed" with Retry; after a reconnect the UI refetches the conversation list and any open or previously loaded conversations to catch up on missed messages.
+
 ## Tests
 
 ```bash
@@ -109,4 +117,4 @@ cd chat-api && npm test
 
 ## Roadmap
 
-Done: foundation, authentication, user directory, conversations. Next: messaging, presence/read receipts, UI polish, deployment.
+Done: foundation, authentication, user directory, conversations, messaging. Next: presence, delivery/read receipts and unread counts, UI polish, deployment.
