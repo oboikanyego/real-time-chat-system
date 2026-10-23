@@ -3,6 +3,8 @@ import type { AuthenticatedUser } from '../types/auth';
 
 type UserRecord = NonNullable<Awaited<ReturnType<typeof upsertUser>>>;
 
+export const toSearchTokens = (name: string) => [...new Set(name.toLowerCase().split(/\s+/).filter(Boolean))];
+
 const fallbackName = (identity: AuthenticatedUser) =>
   identity.displayName?.trim() || identity.email?.split('@')[0] || 'User';
 
@@ -12,12 +14,18 @@ const fallbackName = (identity: AuthenticatedUser) =>
  */
 export async function syncUser(identity: AuthenticatedUser): Promise<UserRecord> {
   try {
-    return await upsertUser(identity);
+    return await ensureSearchTokens(await upsertUser(identity));
   } catch (error) {
     // Two concurrent first sign-ins can race on the unique index; the retry then finds the document.
-    if ((error as { code?: number }).code === 11000) return upsertUser(identity);
+    if ((error as { code?: number }).code === 11000) return ensureSearchTokens(await upsertUser(identity));
     throw error;
   }
+}
+
+/** Profiles created before the directory existed have no tokens yet. */
+async function ensureSearchTokens(user: UserRecord): Promise<UserRecord> {
+  if (user.searchTokens?.length) return user;
+  return (await User.findByIdAndUpdate(user._id, { $set: { searchTokens: toSearchTokens(user.displayName) } }, { new: true }).lean()) ?? user;
 }
 
 const upsertUser = (identity: AuthenticatedUser) =>
@@ -25,13 +33,13 @@ const upsertUser = (identity: AuthenticatedUser) =>
     { firebaseUid: identity.firebaseUid },
     {
       $set: { lastSeenAt: new Date(), ...(identity.email && { email: identity.email }), ...(identity.photoURL && { photoURL: identity.photoURL }) },
-      $setOnInsert: { displayName: fallbackName(identity) }
+      $setOnInsert: { displayName: fallbackName(identity), searchTokens: toSearchTokens(fallbackName(identity)) }
     },
     { upsert: true, new: true }
   ).lean();
 
 export async function updateDisplayName(firebaseUid: string, displayName: string) {
-  return User.findOneAndUpdate({ firebaseUid }, { $set: { displayName } }, { new: true }).lean();
+  return User.findOneAndUpdate({ firebaseUid }, { $set: { displayName, searchTokens: toSearchTokens(displayName) } }, { new: true }).lean();
 }
 
 export function toProfile(user: UserRecord) {

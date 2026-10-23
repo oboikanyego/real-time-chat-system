@@ -11,6 +11,13 @@
   <section class="panel">
     <h2>Connection</h2>
     <span class="status" [attr.data-state]="socket.state()">{{ socket.state() }}</span>
-    <p>Conversations and messaging are coming in the next phases.</p>
+  </section>
+
+  <section class="panel">
+    <h2>People</h2>
+    <app-user-directory (userSelected)="selected.set($event)" />
+    @if (selected(); as user) {
+      <p class="hint">Selected {{ user.displayName }} — starting conversations arrives in the next phase.</p>
+    }
   </section>
 </main>

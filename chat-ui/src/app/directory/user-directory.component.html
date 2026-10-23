@@ -1,0 +1,41 @@
+<div class="search">
+  <input
+    type="search"
+    [formControl]="query"
+    placeholder="Search people by name, or an exact email"
+    aria-label="Search people"
+    autocomplete="off"
+    maxlength="100"
+  />
+</div>
+
+@if (error()) {
+  <p class="state error" role="alert">
+    Couldn't load people.
+    <button type="button" class="link" (click)="retry()">Try again</button>
+  </p>
+} @else if (loading()) {
+  <p class="state">Searching…</p>
+} @else if (users().length === 0) {
+  <p class="state">{{ query.value.trim() ? 'No one matches that search.' : 'No other users have joined yet.' }}</p>
+} @else {
+  <ul>
+    @for (user of users(); track user.id) {
+      <li>
+        <button type="button" class="row" [class.selected]="selectedId() === user.id" (click)="select(user)">
+          @if (user.photoURL) {
+            <img [src]="user.photoURL" alt="" referrerpolicy="no-referrer" />
+          } @else {
+            <span class="avatar" aria-hidden="true">{{ initials(user.displayName) }}</span>
+          }
+          <span class="name">{{ user.displayName }}</span>
+        </button>
+      </li>
+    }
+  </ul>
+  @if (hasMore()) {
+    <button type="button" class="more" (click)="loadMore()" [disabled]="loadingMore()">
+      {{ loadingMore() ? 'Loading…' : loadMoreFailed() ? 'Couldn\'t load more — try again' : 'Load more' }}
+    </button>
+  }
+}

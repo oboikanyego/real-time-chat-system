@@ -22,7 +22,7 @@ export const openApiDocument = {
   openapi: '3.0.3',
   info: {
     title: 'Real-Time Chat API',
-    version: '0.2.0',
+    version: '0.3.0',
     description: 'REST contract for the Real-Time Chat System. Protected endpoints require a Firebase ID token.'
   },
   servers: [{ url: '/' }],
@@ -31,6 +31,41 @@ export const openApiDocument = {
       get: {
         summary: 'Health check',
         responses: { '200': { description: 'Service is healthy' } }
+      }
+    },
+    '/api/v1/users': {
+      get: {
+        summary: 'Search the user directory (excludes the caller)',
+        description: 'Each word of q must prefix-match a word of the display name. A q containing "@" is an exact email lookup.',
+        security: [{ bearerAuth: [] }],
+        parameters: [
+          { name: 'q', in: 'query', schema: { type: 'string', maxLength: 100 } },
+          { name: 'page', in: 'query', schema: { type: 'integer', minimum: 1, maximum: 100, default: 1 } },
+          { name: 'limit', in: 'query', schema: { type: 'integer', minimum: 1, maximum: 50, default: 20 } }
+        ],
+        responses: {
+          '200': {
+            description: 'Matching users',
+            content: { 'application/json': { schema: { $ref: '#/components/schemas/DirectoryPage' } } }
+          },
+          '400': errorResponse,
+          '401': errorResponse
+        }
+      }
+    },
+    '/api/v1/users/{id}': {
+      get: {
+        summary: 'Get one user by id',
+        security: [{ bearerAuth: [] }],
+        parameters: [{ name: 'id', in: 'path', required: true, schema: { type: 'string' } }],
+        responses: {
+          '200': {
+            description: 'The user',
+            content: { 'application/json': { schema: { $ref: '#/components/schemas/DirectoryEntryEnvelope' } } }
+          },
+          '401': errorResponse,
+          '404': errorResponse
+        }
       }
     },
     '/api/v1/me': {
@@ -72,6 +107,29 @@ export const openApiDocument = {
           displayName: { type: 'string' },
           photoURL: { type: 'string', nullable: true },
           createdAt: { type: 'string', format: 'date-time' }
+        }
+      },
+      DirectoryEntry: {
+        type: 'object',
+        properties: {
+          id: { type: 'string' },
+          displayName: { type: 'string' },
+          photoURL: { type: 'string', nullable: true }
+        }
+      },
+      DirectoryEntryEnvelope: {
+        type: 'object',
+        properties: { success: { type: 'boolean', example: true }, data: { $ref: '#/components/schemas/DirectoryEntry' } }
+      },
+      DirectoryPage: {
+        type: 'object',
+        properties: {
+          success: { type: 'boolean', example: true },
+          data: { type: 'array', items: { $ref: '#/components/schemas/DirectoryEntry' } },
+          meta: {
+            type: 'object',
+            properties: { page: { type: 'integer' }, limit: { type: 'integer' }, hasMore: { type: 'boolean' } }
+          }
         }
       },
       ProfileEnvelope: {

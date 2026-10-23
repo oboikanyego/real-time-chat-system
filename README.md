@@ -90,6 +90,11 @@ The API binds to `0.0.0.0` and uses Render's `PORT` variable.
 - **Without Firebase:** with `AUTH_MODE=development` on the API (never honoured when `NODE_ENV=production`) and an empty Firebase config in the UI, the login page shows a username-only dev sign-in. The username is sent as `X-Dev-User` (and `auth.devUser` on the socket), so several local users can be simulated in separate browser sessions.
 - **With Firebase:** enable Email/Password and Google providers in the Firebase console, put the web app config in `chat-ui/src/environments/environment.ts` (or the Netlify variables), and set `AUTH_MODE=firebase` plus the service-account variables on the API.
 
+## User directory
+
+- **API:** `GET /api/v1/users?q=&page=&limit=` lists other users (never the caller), sorted by name and paginated (`limit` up to 50, `meta.hasMore`). Every word of `q` must prefix-match a word of the display name (`gra hop` finds Grace Hopper), served from an indexed `searchTokens` field. A `q` containing `@` is an exact email lookup. Responses expose only `id`, `displayName` and `photoURL`, never email or Firebase UID. `GET /api/v1/users/:id` returns one entry.
+- **UI:** the `/chat` page has a "People" panel with debounced search, loading/empty/error states, retry and "Load more". Picking a user emits an event that the conversations phase will use.
+
 ## Tests
 
 ```bash
@@ -98,4 +103,4 @@ cd chat-api && npm test
 
 ## Roadmap
 
-Done: foundation, authentication. Next: user directory, conversations, messaging, presence/read receipts, UI polish, deployment.
+Done: foundation, authentication, user directory. Next: conversations, messaging, presence/read receipts, UI polish, deployment.

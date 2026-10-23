@@ -14,6 +14,14 @@ export const validateBody = (schema: Schema): RequestHandler => (req, _res, next
   return next();
 };
 
+/** Validated values are kept on res.locals because req.query is read-only in Express 5. */
+export const validateQuery = (schema: Schema): RequestHandler => (req, res, next) => {
+  const { value, error } = schema.validate(req.query, { abortEarly: false, stripUnknown: true });
+  if (error) return next(new AppError(400, 'VALIDATION_ERROR', error.details.map((d) => d.message).join('; ')));
+  res.locals['query'] = value;
+  return next();
+};
+
 export const errorHandler: ErrorRequestHandler = (error, req, res, _next) => {
   if (error instanceof AppError) {
     return res.status(error.status).json({ success: false, error: { code: error.code, message: error.message } });

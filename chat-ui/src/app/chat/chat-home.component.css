@@ -10,3 +10,5 @@ h2 { margin-top: 0; font-size: 1.05rem; }
 .status { display: inline-block; padding: 6px 12px; border-radius: 999px; background: #eef2f7; font-size: .85rem; }
 .status[data-state='connected'] { background: #dcfce7; color: #166534; }
 .status[data-state='unauthorized'] { background: #fee2e2; color: #991b1b; }
+.hint { margin: 16px 0 0; padding: 10px 12px; border-radius: 10px; background: #eef2f7; font-size: .9rem; }
+.panel + .panel { margin-top: 16px; }
