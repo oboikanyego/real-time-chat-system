@@ -3,8 +3,13 @@
     @if (conversation(); as c) {
       <header>
         <a class="back" routerLink="/chat" aria-label="Back to conversations">‹</a>
-        <app-avatar [name]="c.participant.displayName" [photoURL]="c.participant.photoURL" />
-        <h2>{{ c.participant.displayName }}</h2>
+        <app-avatar [name]="c.participant.displayName" [photoURL]="c.participant.photoURL" [online]="subtitle().kind === 'online' || subtitle().kind === 'typing'" />
+        <div class="who">
+          <h2>{{ c.participant.displayName }}</h2>
+          @if (subtitle().text) {
+            <span class="sub" [attr.data-kind]="subtitle().kind" aria-live="polite">{{ subtitle().text }}</span>
+          }
+        </div>
       </header>
 
       <div class="scroller" #scroller>
@@ -34,7 +39,13 @@
                       <span class="fail">{{ m.error || "Couldn't send" }}</span>
                       <button type="button" class="link" (click)="retry(m)">Retry</button>
                     }
-                    @default { <time [attr.datetime]="m.createdAt">{{ m.createdAt | date: 'shortTime' }}</time> }
+                    @default {
+                      <time [attr.datetime]="m.createdAt">{{ m.createdAt | date: 'shortTime' }}</time>
+                      @if (isMine(m)) {
+                        @let r = receipt(m);
+                        <span class="ticks" [attr.data-state]="r" [attr.aria-label]="r">{{ r === 'sent' ? '✓' : '✓✓' }}</span>
+                      }
+                    }
                   }
                 </div>
               </li>
@@ -51,6 +62,8 @@
           placeholder="Write a message"
           aria-label="Message"
           [(ngModel)]="draft"
+          (input)="onInput()"
+          (blur)="stopTyping()"
           (keydown.enter)="onEnter($event)"
         ></textarea>
         <button type="submit" [disabled]="!draft.trim()">Send</button>

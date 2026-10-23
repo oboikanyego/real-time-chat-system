@@ -2,11 +2,10 @@ import Joi from 'joi';
 import { Types } from 'mongoose';
 import { Conversation } from '../models/conversation.model';
 import { Message } from '../models/message.model';
-import { User } from '../models/user.model';
 import { AppError } from '../middleware/error';
+import { hasSocket } from '../socket/presence';
 import { emitToUser } from '../socket/realtime';
-import { toConversationView } from './conversation.service';
-import { toDirectoryEntry } from './directory.service';
+import { buildView, loadPeople, requireParticipation } from './conversation.service';
 
 export const sendMessageSchema = Joi.object({
   clientMessageId: Joi.string().trim().pattern(/^[\w-]+$/).min(8).max(64).required(),
@@ -42,15 +41,6 @@ export function toMessageView(message: MessageRecord) {
   };
 }
 
-/** Participant-only lookup; a missing conversation and someone else's look identical. */
-async function requireParticipation(callerId: Types.ObjectId, conversationId: string) {
-  const conversation = Types.ObjectId.isValid(conversationId)
-    ? await Conversation.findOne({ _id: conversationId, participants: callerId }).lean()
-    : null;
-  if (!conversation) throw new AppError(404, 'CONVERSATION_NOT_FOUND', 'Conversation not found.');
-  return conversation;
-}
-
 /**
  * Stores a message and notifies both participants. Retrying with the same clientMessageId
  * returns the stored message (`duplicate: true`) without storing or broadcasting it again.
@@ -77,23 +67,32 @@ export async function sendMessage(callerId: Types.ObjectId, conversationId: stri
 }
 
 async function publishNewMessage(conversation: { _id: unknown; participants: Types.ObjectId[] }, message: MessageRecord) {
-  const lastMessage = { text: message.text, senderId: message.senderId, sentAt: message.createdAt };
+  const lastMessage = { text: message.text, senderId: message.senderId, sentAt: message.createdAt, messageId: message._id };
+  const sender = String(message.senderId);
+  const mine = (field: string) => `cursors.${sender}.${field}`;
   // Only move the preview forward, so two near-simultaneous sends cannot leave an older one as "last".
-  const updated =
+  // Sending also counts as having read everything up to the new message.
+  let updated =
     (await Conversation.findOneAndUpdate(
       { _id: conversation._id, $or: [{ lastMessageAt: null }, { lastMessageAt: { $lt: message.createdAt } }] },
-      { $set: { lastMessage, lastMessageAt: message.createdAt } },
+      { $set: { lastMessage, lastMessageAt: message.createdAt }, $max: { [mine('readUpTo')]: message._id, [mine('deliveredUpTo')]: message._id } },
       { new: true }
     ).lean()) ?? (await Conversation.findById(conversation._id).lean());
   if (!updated) return;
 
-  const users = await User.find({ _id: { $in: updated.participants } }, { displayName: 1, photoURL: 1 }).lean();
-  const people = new Map(users.map((u) => [String(u._id), toDirectoryEntry(u)]));
-  const payload = toMessageView(message);
+  // A recipient with a live socket has the message as soon as it is pushed.
+  const recipient = updated.participants.find((id) => String(id) !== sender);
+  if (recipient && hasSocket(recipient)) {
+    updated =
+      (await Conversation.findByIdAndUpdate(updated._id, { $max: { [`cursors.${recipient}.deliveredUpTo`]: message._id } }, { new: true }).lean()) ?? updated;
+  }
 
+  const payload = toMessageView(message);
   for (const participantId of updated.participants) {
+    // Each participant gets their own view (unread count, who the "other" person is); the people map is per viewer too.
+    const people = await loadPeople([updated], participantId);
     emitToUser(participantId, 'message:new', { message: payload });
-    emitToUser(participantId, 'conversation:updated', { conversation: toConversationView(updated, participantId, people) });
+    emitToUser(participantId, 'conversation:updated', { conversation: await buildView(updated, participantId, people) });
   }
 }
 

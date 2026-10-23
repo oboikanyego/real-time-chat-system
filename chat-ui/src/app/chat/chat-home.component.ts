@@ -1,4 +1,5 @@
-import { Component, OnDestroy, OnInit, inject, signal } from '@angular/core';
+import { Component, OnDestroy, OnInit, computed, effect, inject, signal } from '@angular/core';
+import { Title } from '@angular/platform-browser';
 import { toSignal } from '@angular/core/rxjs-interop';
 import { Router, RouterOutlet } from '@angular/router';
 import { map } from 'rxjs';
@@ -24,6 +25,9 @@ export class ChatHomeComponent implements OnInit, OnDestroy {
   private readonly conversations = inject(ConversationService);
   private readonly messages = inject(MessageService);
   private readonly router = inject(Router);
+  private readonly title = inject(Title);
+
+  private readonly totalUnread = computed(() => this.conversations.conversations().reduce((sum, c) => sum + c.unreadCount, 0));
 
   protected readonly tab = signal<'chats' | 'people'>('chats');
   protected readonly openError = signal('');
@@ -33,12 +37,18 @@ export class ChatHomeComponent implements OnInit, OnDestroy {
     { initialValue: this.router.url.startsWith('/chat/') }
   );
 
+  constructor() {
+    // "(3) Real-Time Chat" in the browser tab while there is something unread.
+    effect(() => this.title.setTitle(this.totalUnread() > 0 ? `(${this.totalUnread()}) Real-Time Chat` : 'Real-Time Chat'));
+  }
+
   ngOnInit(): void {
     this.socket.connect();
     void this.conversations.load();
   }
 
   ngOnDestroy(): void {
+    this.title.setTitle('Real-Time Chat');
     this.socket.disconnect();
   }
 

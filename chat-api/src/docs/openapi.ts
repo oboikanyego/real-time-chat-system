@@ -22,9 +22,9 @@ export const openApiDocument = {
   openapi: '3.0.3',
   info: {
     title: 'Real-Time Chat API',
-    version: '0.5.0',
+    version: '0.6.0',
     description:
-      'REST contract for the Real-Time Chat System. Protected endpoints require a Firebase ID token. Real-time events (message:send, message:new, conversation:updated) are documented in docs/TECHNICAL_DESIGN.md.'
+      'REST contract for the Real-Time Chat System. Protected endpoints require a Firebase ID token. Real-time events (message:send, message:read, message:new, conversation:updated, receipt:update, presence:update, typing:*) are documented in docs/TECHNICAL_DESIGN.md.'
   },
   servers: [{ url: '/' }],
   paths: {
@@ -233,13 +233,34 @@ export const openApiDocument = {
         properties: {
           id: { type: 'string' },
           type: { type: 'string', enum: ['direct'] },
-          participant: { $ref: '#/components/schemas/DirectoryEntry' },
+          participant: {
+            allOf: [{ $ref: '#/components/schemas/DirectoryEntry' }],
+            properties: {
+              presence: {
+                type: 'object',
+                nullable: true,
+                description: 'Null until the two have exchanged a message.',
+                properties: { online: { type: 'boolean' }, lastSeenAt: { type: 'string', format: 'date-time', nullable: true } }
+              }
+            }
+          },
           lastMessage: {
             type: 'object',
             nullable: true,
-            properties: { text: { type: 'string' }, senderId: { type: 'string' }, sentAt: { type: 'string', format: 'date-time' } }
+            properties: {
+              id: { type: 'string', nullable: true },
+              text: { type: 'string' },
+              senderId: { type: 'string' },
+              sentAt: { type: 'string', format: 'date-time' }
+            }
           },
           lastMessageAt: { type: 'string', format: 'date-time', nullable: true },
+          unreadCount: { type: 'integer', description: "Caller's unread messages, capped at 100." },
+          peerReceipts: {
+            type: 'object',
+            description: 'Message ids up to which the other person has received / read.',
+            properties: { deliveredUpTo: { type: 'string', nullable: true }, readUpTo: { type: 'string', nullable: true } }
+          },
           createdAt: { type: 'string', format: 'date-time' }
         }
       },

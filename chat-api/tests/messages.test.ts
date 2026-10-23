@@ -22,13 +22,19 @@ vi.mock('../src/socket/realtime', () => ({ emitToUser, setRealtimeServer: vi.fn(
 const convFindOne = vi.fn();
 const convUpdate = vi.fn();
 const convFindById = vi.fn();
+const convFindByIdAndUpdate = vi.fn();
 vi.mock('../src/models/conversation.model', () => ({
-  Conversation: { findOne: convFindOne, findOneAndUpdate: convUpdate, findById: convFindById }
+  Conversation: { findOne: convFindOne, findOneAndUpdate: convUpdate, findById: convFindById, findByIdAndUpdate: convFindByIdAndUpdate }
 }));
+const hasSocket = vi.fn();
+vi.mock('../src/socket/presence', () => ({ hasSocket, isOnline: () => false }));
 const msgCreate = vi.fn();
 const msgFindOne = vi.fn();
 const msgFind = vi.fn();
-vi.mock('../src/models/message.model', () => ({ Message: { create: msgCreate, findOne: msgFindOne, find: msgFind } }));
+const msgCount = vi.fn();
+vi.mock('../src/models/message.model', () => ({
+  Message: { create: msgCreate, findOne: msgFindOne, find: msgFind, countDocuments: msgCount }
+}));
 const userFind = vi.fn();
 vi.mock('../src/models/user.model', () => ({ User: { find: userFind } }));
 
@@ -57,6 +63,8 @@ beforeEach(() => {
   msgCreate.mockResolvedValue({ toObject: () => doc });
   convUpdate.mockReturnValue(lean({ ...conversation, lastMessage: { text: 'hello', senderId: me, sentAt: doc.createdAt }, lastMessageAt: doc.createdAt }));
   userFind.mockReturnValue(lean([{ _id: me, displayName: 'Me' }, { _id: other, displayName: 'Grace' }]));
+  hasSocket.mockReturnValue(false);
+  msgCount.mockResolvedValue(0);
 });
 
 describe('POST /conversations/:id/messages', () => {
@@ -101,11 +109,37 @@ describe('POST /conversations/:id/messages', () => {
       `${other}:message:new`,
       `${other}:conversation:updated`
     ]);
+    msgCount.mockImplementation(async (filter: { senderId: { $ne: Types.ObjectId } }) => (String(filter.senderId.$ne) === String(other) ? 1 : 0));
+    emitToUser.mockClear();
+    await auth(request(app).post(url)).send({ ...body, clientMessageId: 'client-msg-2' });
     const forMe = emitToUser.mock.calls.find(([id, event]) => id === me && event === 'conversation:updated')![2];
     const forOther = emitToUser.mock.calls.find(([id, event]) => id === other && event === 'conversation:updated')![2];
+    expect(forOther.conversation.unreadCount).toBe(1);
+    expect(forMe.conversation.unreadCount).toBe(0);
     expect(forMe.conversation.participant.displayName).toBe('Grace');
     expect(forOther.conversation.participant.displayName).toBe('Me');
     expect(forOther.conversation.lastMessage.text).toBe('hello');
+  });
+
+  it('counts sending as reading: the sender cursor moves to the new message', async () => {
+    const res = await auth(request(app).post(url)).send(body);
+    const [, update] = convUpdate.mock.calls[0]!;
+    expect(update.$max).toEqual({
+      [`cursors.${me}.readUpTo`]: expect.anything(),
+      [`cursors.${me}.deliveredUpTo`]: expect.anything()
+    });
+    expect(String(update.$max[`cursors.${me}.readUpTo`])).toBe(res.body.data.id);
+  });
+
+  it('marks it delivered only when the recipient has a live socket', async () => {
+    await auth(request(app).post(url)).send(body);
+    expect(convFindByIdAndUpdate).not.toHaveBeenCalled();
+
+    hasSocket.mockReturnValue(true);
+    convFindByIdAndUpdate.mockReturnValue(lean(conversation));
+    await auth(request(app).post(url)).send({ ...body, clientMessageId: 'client-msg-3' });
+    const [, update] = convFindByIdAndUpdate.mock.calls[0]!;
+    expect(Object.keys(update.$max)).toEqual([`cursors.${other}.deliveredUpTo`]);
   });
 
   it('only advances the conversation preview', async () => {

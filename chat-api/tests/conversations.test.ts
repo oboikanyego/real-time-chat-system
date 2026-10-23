@@ -19,6 +19,8 @@ const findOneAndUpdate = vi.fn();
 const find = vi.fn();
 const findOne = vi.fn();
 vi.mock('../src/models/conversation.model', () => ({ Conversation: { findOneAndUpdate, find, findOne } }));
+const msgCount = vi.fn();
+vi.mock('../src/models/message.model', () => ({ Message: { countDocuments: msgCount } }));
 const userFindById = vi.fn();
 const userFind = vi.fn();
 vi.mock('../src/models/user.model', () => ({ User: { findById: userFindById, find: userFind } }));
@@ -140,6 +142,48 @@ describe('GET /api/v1/conversations', () => {
 
   it('rejects a bad limit', async () => {
     expect((await auth(request(app).get('/api/v1/conversations?limit=500'))).status).toBe(400);
+  });
+});
+
+describe('receipt and presence fields in conversation views', () => {
+  const when = new Date('2026-03-01');
+  const established = (over = {}) =>
+    conv({ lastMessageAt: when, lastMessage: { text: 'hey', senderId: other, sentAt: when, messageId: new Types.ObjectId() }, ...over });
+
+  it('withholds presence until a message exists, and shows last seen afterwards', async () => {
+    const stranger = new Types.ObjectId(); // a direct conversation is unique per pair, so each one has its own other person
+    userFind.mockReturnValue(lean([{ _id: other, displayName: 'Grace', lastSeenAt: when }, { _id: stranger, displayName: 'Ada', lastSeenAt: when }]));
+    find.mockReturnValue(chain([established(), conv({ participants: [me, stranger] })]));
+    const res = await auth(request(app).get('/api/v1/conversations'));
+    expect(res.body.data[0].participant.presence).toEqual({ online: false, lastSeenAt: when.toISOString() });
+    expect(res.body.data[1].participant.presence).toBeNull();
+  });
+
+  it('reports unread for the viewer, counting only the other person\'s messages after the read cursor', async () => {
+    const readUpTo = new Types.ObjectId();
+    msgCount.mockResolvedValue(3);
+    find.mockReturnValue(chain([established({ cursors: { [String(me)]: { readUpTo } } })]));
+    const res = await auth(request(app).get('/api/v1/conversations'));
+    expect(res.body.data[0].unreadCount).toBe(3);
+    const [filter, options] = msgCount.mock.calls[0]!;
+    expect(filter).toMatchObject({ senderId: { $ne: me }, _id: { $gt: readUpTo } });
+    expect(options).toEqual({ limit: 100 });
+  });
+
+  it('does not count anything for a conversation without messages', async () => {
+    find.mockReturnValue(chain([conv()]));
+    const res = await auth(request(app).get('/api/v1/conversations'));
+    expect(res.body.data[0].unreadCount).toBe(0);
+    expect(msgCount).not.toHaveBeenCalled();
+  });
+
+  it("exposes the peer's receipts so the sender can show Delivered/Read", async () => {
+    const delivered = new Types.ObjectId();
+    const read = new Types.ObjectId();
+    find.mockReturnValue(chain([established({ cursors: { [String(other)]: { deliveredUpTo: delivered, readUpTo: read } } })]));
+    const res = await auth(request(app).get('/api/v1/conversations'));
+    expect(res.body.data[0].peerReceipts).toEqual({ deliveredUpTo: String(delivered), readUpTo: String(read) });
+    expect(res.body.data[0].lastMessage.id).toBeTruthy();
   });
 });
 

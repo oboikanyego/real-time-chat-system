@@ -4,53 +4,106 @@ import { env } from '../config/env';
 import { resolveIdentity, UnauthorizedError } from '../auth/identity';
 import { AppError } from '../middleware/error';
 import { sendMessage, socketSendSchema } from '../services/message.service';
+import { announceOffline, announceOnline, otherParticipantIfEstablished } from '../services/presence.service';
+import { markPendingDelivered, markRead, markReadSchema } from '../services/receipt.service';
 import { resolveProfileId } from '../services/user.service';
-import { personalRoom, setRealtimeServer } from './realtime';
+import { createPresenceTracker, setPresenceTracker } from './presence';
+import { emitToUser, personalRoom, setRealtimeServer } from './realtime';
 
-const SEND_LIMIT = { max: 20, windowMs: 10_000 };
+const WINDOW_MS = 10_000;
+const PRESENCE_GRACE_MS = 5_000;
 
-type Ack = (response: { ok: true; message: unknown; duplicate: boolean } | { ok: false; error: { code: string; message: string } }) => void;
+type Ack = (response: { ok: true; [key: string]: unknown } | { ok: false; error: { code: string; message: string } }) => void;
 
-/** Sliding-window limit per socket, so one connection cannot flood a conversation. */
-function createSendLimiter() {
-  let sent: number[] = [];
+/** Sliding-window limit per socket, so one connection cannot flood the server or a conversation. */
+function createLimiter(max: number) {
+  let hits: number[] = [];
   return () => {
     const now = Date.now();
-    sent = sent.filter((t) => now - t < SEND_LIMIT.windowMs);
-    if (sent.length >= SEND_LIMIT.max) return false;
-    sent.push(now);
+    hits = hits.filter((t) => now - t < WINDOW_MS);
+    if (hits.length >= max) return false;
+    hits.push(now);
     return true;
   };
 }
 
-function registerMessageHandlers(socket: Socket) {
-  const allow = createSendLimiter();
-
-  socket.on('message:send', async (payload: unknown, ack?: Ack) => {
-    const reply: Ack = typeof ack === 'function' ? ack : () => undefined;
-    try {
-      if (!allow()) throw new AppError(429, 'RATE_LIMITED', 'You are sending messages too quickly.');
-      const { value, error } = socketSendSchema.validate(payload, { abortEarly: false, stripUnknown: true });
-      if (error) throw new AppError(400, 'VALIDATION_ERROR', error.details.map((d) => d.message).join('; '));
-
-      const { conversationId, ...input } = value;
-      // The sender is always the authenticated socket user, never a field from the payload.
-      const { message, duplicate } = await sendMessage(socket.data.profileId, conversationId, input);
-      reply({ ok: true, message, duplicate });
-    } catch (error) {
+/** Runs a handler that answers with an ack, turning thrown AppErrors into `{ok: false}` replies. */
+function respond(ack: unknown, run: () => Promise<Record<string, unknown>>): Promise<void> {
+  const reply: Ack = typeof ack === 'function' ? (ack as Ack) : () => undefined;
+  return run().then(
+    (data) => reply({ ok: true, ...data }),
+    (error) => {
       if (error instanceof AppError) return reply({ ok: false, error: { code: error.code, message: error.message } });
-      console.error('[socket] message:send failed', error);
-      reply({ ok: false, error: { code: 'INTERNAL_ERROR', message: 'Unexpected server error.' } });
+      console.error('[socket] handler failed', error);
+      return reply({ ok: false, error: { code: 'INTERNAL_ERROR', message: 'Unexpected server error.' } });
     }
-  });
+  );
 }
 
-export function createSocketServer(httpServer: HttpServer) {
+const validate = <T>(schema: { validate: (v: unknown, o: object) => { value: T; error?: { details: { message: string }[] } } }, payload: unknown): T => {
+  const { value, error } = schema.validate(payload, { abortEarly: false, stripUnknown: true });
+  if (error) throw new AppError(400, 'VALIDATION_ERROR', error.details.map((d) => d.message).join('; '));
+  return value;
+};
+
+function registerHandlers(socket: Socket) {
+  const allowSend = createLimiter(20);
+  const allowRead = createLimiter(60);
+  const allowTyping = createLimiter(40);
+  const me = () => socket.data.profileId;
+
+  socket.on('message:send', (payload: unknown, ack?: Ack) =>
+    respond(ack, async () => {
+      if (!allowSend()) throw new AppError(429, 'RATE_LIMITED', 'You are sending messages too quickly.');
+      const { conversationId, ...input } = validate<{ conversationId: string; clientMessageId: string; text: string }>(socketSendSchema, payload);
+      // The sender is always the authenticated socket user, never a field from the payload.
+      const { message, duplicate } = await sendMessage(me(), conversationId, input);
+      return { message, duplicate };
+    })
+  );
+
+  socket.on('message:read', (payload: unknown, ack?: Ack) =>
+    respond(ack, async () => {
+      if (!allowRead()) throw new AppError(429, 'RATE_LIMITED', 'Too many read receipts.');
+      const { conversationId, messageId } = validate<{ conversationId: string; messageId: string }>(markReadSchema, payload);
+      return markRead(me(), conversationId, messageId);
+    })
+  );
+
+  // Typing indicators are best effort: invalid, unauthorized or excessive events are dropped silently.
+  const peers = new Map<string, string>();
+  const relayTyping = (typing: boolean) => async (payload: unknown) => {
+    const conversationId = (payload as { conversationId?: unknown } | null)?.conversationId;
+    if (typeof conversationId !== 'string' || !/^[0-9a-f]{24}$/i.test(conversationId) || !allowTyping()) return;
+    try {
+      let peer = peers.get(conversationId);
+      if (!peer) {
+        peer = (await otherParticipantIfEstablished(me(), conversationId)) ?? undefined;
+        if (!peer) return;
+        peers.set(conversationId, peer);
+      }
+      emitToUser(peer, 'typing:update', { conversationId, userId: String(me()), typing });
+    } catch (error) {
+      console.error('[socket] typing relay failed', error);
+    }
+  };
+  socket.on('typing:start', relayTyping(true));
+  socket.on('typing:stop', relayTyping(false));
+}
+
+export function createSocketServer(httpServer: HttpServer, options: { presenceGraceMs?: number } = {}) {
   const io = new Server(httpServer, {
     cors: { origin: env.clientOrigins, credentials: true },
     transports: ['websocket', 'polling']
   });
   setRealtimeServer(io);
+
+  const presence = createPresenceTracker({
+    graceMs: options.presenceGraceMs ?? PRESENCE_GRACE_MS,
+    onOnline: (id) => void announceOnline(id).catch((e) => console.error('[presence] online broadcast failed', e)),
+    onOffline: (id) => void announceOffline(id).catch((e) => console.error('[presence] offline update failed', e))
+  });
+  setPresenceTracker(presence);
 
   io.use(async (socket, next) => {
     try {
@@ -68,7 +121,14 @@ export function createSocketServer(httpServer: HttpServer) {
   io.on('connection', (socket) => {
     const uid = socket.data.user.firebaseUid as string;
     socket.join([`firebase:${uid}`, personalRoom(socket.data.profileId)]);
-    registerMessageHandlers(socket);
+    registerHandlers(socket);
+
+    const profileId = String(socket.data.profileId);
+    presence.connect(profileId, socket.id);
+    socket.on('disconnect', () => presence.disconnect(profileId, socket.id));
+    // Anything sent while this user had no socket counts as delivered now.
+    void markPendingDelivered(socket.data.profileId).catch((e) => console.error('[receipts] pending delivery failed', e));
+
     socket.emit('system:ready', { socketId: socket.id, firebaseUid: uid });
   });
 

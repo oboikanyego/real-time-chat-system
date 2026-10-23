@@ -3,7 +3,7 @@ ul { list-style: none; margin: 0; padding: 0; display: grid; gap: 4px; }
 .row { display: flex; align-items: center; gap: 12px; padding: 8px 10px; border-radius: 12px; color: inherit; text-decoration: none; }
 .row:hover { background: #f3f4f6; }
 .row.active { background: #e5e7eb; }
-.text { display: grid; min-width: 0; }
+.text { display: grid; min-width: 0; flex: 1; }
 .name { font-weight: 600; }
 .preview { color: #6b7280; font-size: .85rem; }
 .name, .preview { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -12,3 +12,6 @@ ul { list-style: none; margin: 0; padding: 0; display: grid; gap: 4px; }
 .link { border: 0; background: none; padding: 0; color: inherit; font-weight: 700; text-decoration: underline; cursor: pointer; }
 .more { margin-top: 10px; width: 100%; padding: 10px; border: 1px solid #d1d5db; border-radius: 10px; background: #fff; font-weight: 600; cursor: pointer; }
 .more:disabled { opacity: .6; cursor: progress; }
+.name.unread, .preview.unread { color: #111827; font-weight: 700; }
+.preview.typing { color: #16a34a; font-style: italic; }
+.badge { flex: none; min-width: 22px; padding: 2px 7px; border-radius: 999px; background: #111827; color: #fff; font-size: .72rem; font-weight: 700; text-align: center; }

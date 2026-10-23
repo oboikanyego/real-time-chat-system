@@ -12,10 +12,13 @@ const conversationSchema = new Schema(
     // Users who opened the conversation. Someone else's empty conversation stays hidden until a message arrives.
     openedBy: { type: [Schema.Types.ObjectId], default: [] },
     lastMessage: {
-      type: new Schema({ text: String, senderId: Schema.Types.ObjectId, sentAt: Date }, { _id: false }),
+      type: new Schema({ text: String, senderId: Schema.Types.ObjectId, sentAt: Date, messageId: Schema.Types.ObjectId }, { _id: false }),
       default: null
     },
-    lastMessageAt: { type: Date, default: null }
+    lastMessageAt: { type: Date, default: null },
+    // Per-user receipt cursors keyed by profile id: { [userId]: { deliveredUpTo, readUpTo } } (message ObjectIds).
+    // A message is delivered/read for a user when its _id is <= their cursor; cursors only move forward ($max).
+    cursors: { type: Schema.Types.Mixed, default: {} }
   },
   { timestamps: true }
 );

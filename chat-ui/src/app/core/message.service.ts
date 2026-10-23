@@ -3,6 +3,7 @@ import { Injectable, inject, signal } from '@angular/core';
 import { firstValueFrom } from 'rxjs';
 import { environment } from '../../environments/environment';
 import { AuthService } from './auth.service';
+import { ConversationService } from './conversation.service';
 import { SocketService } from './socket.service';
 
 export interface ServerMessage {
@@ -55,14 +56,20 @@ export class MessageService {
   private readonly http = inject(HttpClient);
   private readonly auth = inject(AuthService);
   private readonly socket = inject(SocketService);
+  private readonly conversations = inject(ConversationService);
 
   private readonly loaded = new Set<string>();
+  /** Newest message id already reported as read, per conversation, so each is reported once. */
+  private readonly readReported = new Map<string, string>();
   readonly state = signal<Record<string, ConversationMessages>>({});
 
   constructor() {
     this.socket.messageNew$.subscribe((m) => this.receive(m));
     // Anything sent while the connection was down is fetched again for conversations already loaded.
-    this.socket.reconnected$.subscribe(() => this.loaded.forEach((id) => void this.loadLatest(id)));
+    this.socket.reconnected$.subscribe(() => {
+      this.readReported.clear(); // a report may have been lost with the old connection
+      this.loaded.forEach((id) => void this.loadLatest(id));
+    });
   }
 
   /** Loads the newest page; also used to catch up after reopening a conversation or reconnecting. */
@@ -141,7 +148,26 @@ export class MessageService {
     this.update(message.conversationId, (s) => ({ ...s, messages: merge(s.messages, [toChat(message)]) }));
   }
 
+  /**
+   * The user is looking at this conversation: report the newest message from the other person as read
+   * (once per message) and clear the unread badge right away.
+   */
+  markRead(conversationId: string): void {
+    const me = this.auth.profile();
+    const messages = this.state()[conversationId]?.messages ?? [];
+    const latest = [...messages].reverse().find((m) => m.status === 'sent' && m.senderId !== me?.id);
+    if (!latest?.id || this.readReported.get(conversationId) === latest.id) return;
+
+    this.readReported.set(conversationId, latest.id);
+    this.conversations.markReadLocally(conversationId);
+    this.socket.markRead({ conversationId, messageId: latest.id }).catch(() => {
+      // Offline or rejected: forget it so the next opportunity (e.g. after reconnecting) reports it again.
+      if (this.readReported.get(conversationId) === latest.id) this.readReported.delete(conversationId);
+    });
+  }
+
   reset(): void {
+    this.readReported.clear();
     this.loaded.clear();
     this.state.set({});
   }

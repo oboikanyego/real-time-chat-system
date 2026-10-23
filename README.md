@@ -109,6 +109,14 @@ The API binds to `0.0.0.0` and uses Render's `PORT` variable.
 - **Safety:** the sender is always the authenticated user, never a payload field; text is trimmed, 1-2000 characters, and rendered as plain text; only participants can read or send (others get 404); each socket is limited to 20 sends per 10 s.
 - **Resilience:** unconfirmed messages show "Sending…" or "Failed" with Retry; after a reconnect the UI refetches the conversation list and any open or previously loaded conversations to catch up on missed messages.
 
+## Presence, receipts and typing
+
+- **Presence:** the chat header and conversation list show who is online (green dot) or when they were last seen. A user is online while any tab has a socket; going offline waits 5 s so reloading does not flicker, then records "last seen". Presence is only shared between people who have exchanged a message.
+- **Receipts:** your messages show ✓ sent, ✓✓ delivered (the other person has a live connection, or connected since) and blue ✓✓ read. Receipts are stored as per-user cursors on the conversation, so marking a long history read is a single write.
+- **Unread:** conversations show an unread badge (capped at 99+) and the browser tab title shows the total. A conversation is only marked read while it is open **and** the page is visible and focused; a message that arrives in an unfocused tab stays unread until you come back.
+- **Typing:** "typing…" appears in the header and the list while the other person types; it is throttled on the sender's side and expires on its own if the sender goes quiet.
+- **Limits:** presence state lives in the memory of one API instance (fine for the single Render service; multiple instances would need Redis).
+
 ## Tests
 
 ```bash
@@ -117,4 +125,4 @@ cd chat-api && npm test
 
 ## Roadmap
 
-Done: foundation, authentication, user directory, conversations, messaging. Next: presence, delivery/read receipts and unread counts, UI polish, deployment.
+Done: foundation, authentication, user directory, conversations, messaging, presence and read receipts. Next: UI polish, deployment.

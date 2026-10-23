@@ -4,13 +4,28 @@ import { firstValueFrom } from 'rxjs';
 import { environment } from '../../environments/environment';
 import { DirectoryUser } from './directory.service';
 import { SocketService } from './socket.service';
+import { laterId } from './time';
+
+export interface Presence {
+  online: boolean;
+  lastSeenAt: string | null;
+}
+
+export interface Participant extends DirectoryUser {
+  /** Null until the two have exchanged a message; presence is not shared before that. */
+  presence: Presence | null;
+}
 
 export interface Conversation {
   id: string;
   type: 'direct';
-  participant: DirectoryUser;
-  lastMessage: { text: string; senderId: string; sentAt: string } | null;
+  participant: Participant;
+  lastMessage: { id: string | null; text: string; senderId: string; sentAt: string } | null;
   lastMessageAt: string | null;
+  /** Messages from the other person after your read cursor (capped at 100). */
+  unreadCount: number;
+  /** How far the other person has received / read, as message ids. */
+  peerReceipts: { deliveredUpTo: string | null; readUpTo: string | null };
   createdAt: string;
 }
 
@@ -51,6 +66,27 @@ export class ConversationService {
   constructor() {
     // A new message makes the conversation appear (for the recipient) or move up and update its preview.
     this.socket.conversationUpdated$.subscribe((c) => this.conversations.update((list) => place(list, c)));
+    this.socket.presenceUpdate$.subscribe((p) =>
+      this.change((c) =>
+        c.participant.id === p.userId
+          ? { ...c, participant: { ...c.participant, presence: { online: p.online, lastSeenAt: p.lastSeenAt ?? c.participant.presence?.lastSeenAt ?? null } } }
+          : c
+      )
+    );
+    // Receipts only move forward, so a late or repeated event cannot undo a newer one.
+    this.socket.receiptUpdate$.subscribe((r) =>
+      this.change((c) =>
+        c.id === r.conversationId && c.participant.id === r.userId
+          ? {
+              ...c,
+              peerReceipts: {
+                deliveredUpTo: laterId(c.peerReceipts.deliveredUpTo, r.deliveredUpTo),
+                readUpTo: laterId(c.peerReceipts.readUpTo, r.readUpTo)
+              }
+            }
+          : c
+      )
+    );
     // Missed updates while disconnected are recovered by reloading the first page.
     this.socket.reconnected$.subscribe(() => void this.refresh());
   }
@@ -98,10 +134,22 @@ export class ConversationService {
     const known = this.conversations().find((c) => c.id === id);
     if (known) return known;
     try {
-      return (await firstValueFrom(this.http.get<{ data: Conversation }>(`${base}/${id}`))).data;
+      const fetched = (await firstValueFrom(this.http.get<{ data: Conversation }>(`${base}/${id}`))).data;
+      // Conversations with messages belong in the list (and then stay live); an empty one is not listed by the API either.
+      if (fetched.lastMessageAt) this.conversations.update((list) => (list.some((c) => c.id === id) ? list : place(list, fetched)));
+      return fetched;
     } catch {
       return null;
     }
+  }
+
+  /** Clears the badge straight away; the server confirms with its own conversation:updated. */
+  markReadLocally(id: string): void {
+    this.change((c) => (c.id === id && c.unreadCount > 0 ? { ...c, unreadCount: 0 } : c));
+  }
+
+  private change(fn: (c: Conversation) => Conversation): void {
+    this.conversations.update((list) => list.map(fn));
   }
 
   /** Reloads the first page without flashing the loading state, keeping anything already on screen. */

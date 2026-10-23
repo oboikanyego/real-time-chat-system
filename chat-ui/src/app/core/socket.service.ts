@@ -12,6 +12,26 @@ export type SendAck =
   | { ok: true; message: ServerMessage; duplicate: boolean }
   | { ok: false; error: { code: string; message: string } };
 
+export interface PresenceEvent {
+  userId: string;
+  online: boolean;
+  lastSeenAt: string | null;
+}
+
+export interface ReceiptEvent {
+  conversationId: string;
+  /** Who the receipt is about: the person who received or read. */
+  userId: string;
+  deliveredUpTo: string | null;
+  readUpTo: string | null;
+}
+
+export interface TypingEvent {
+  conversationId: string;
+  userId: string;
+  typing: boolean;
+}
+
 const ACK_TIMEOUT_MS = 8000;
 
 @Injectable({ providedIn: 'root' })
@@ -25,6 +45,9 @@ export class SocketService {
   /** Server pushes. */
   readonly messageNew$ = new Subject<ServerMessage>();
   readonly conversationUpdated$ = new Subject<Conversation>();
+  readonly presenceUpdate$ = new Subject<PresenceEvent>();
+  readonly receiptUpdate$ = new Subject<ReceiptEvent>();
+  readonly typingUpdate$ = new Subject<TypingEvent>();
   /** Fires after a dropped connection comes back, so stores can refetch what they missed. */
   readonly reconnected$ = new Subject<void>();
 
@@ -56,6 +79,9 @@ export class SocketService {
     });
     this.socket.on('message:new', (e: { message: ServerMessage }) => this.messageNew$.next(e.message));
     this.socket.on('conversation:updated', (e: { conversation: Conversation }) => this.conversationUpdated$.next(e.conversation));
+    this.socket.on('presence:update', (e: PresenceEvent) => this.presenceUpdate$.next(e));
+    this.socket.on('receipt:update', (e: ReceiptEvent) => this.receiptUpdate$.next(e));
+    this.socket.on('typing:update', (e: TypingEvent) => this.typingUpdate$.next(e));
   }
 
   get isConnected(): boolean {
@@ -66,6 +92,18 @@ export class SocketService {
   async sendMessage(payload: { conversationId: string; clientMessageId: string; text: string }): Promise<SendAck> {
     if (!this.socket || !this.isConnected) throw new Error('offline');
     return this.socket.timeout(ACK_TIMEOUT_MS).emitWithAck('message:send', payload);
+  }
+
+  /** Tells the server the user has read up to a message. Rejects if offline; callers may simply try again later. */
+  async markRead(payload: { conversationId: string; messageId: string }): Promise<void> {
+    if (!this.socket || !this.isConnected) throw new Error('offline');
+    const ack = await this.socket.timeout(ACK_TIMEOUT_MS).emitWithAck('message:read', payload);
+    if (!ack.ok) throw new Error(ack.error.code);
+  }
+
+  /** Fire-and-forget: a lost typing indicator is harmless. */
+  emitTyping(conversationId: string, typing: boolean): void {
+    if (this.isConnected) this.socket?.emit(typing ? 'typing:start' : 'typing:stop', { conversationId });
   }
 
   disconnect(): void {

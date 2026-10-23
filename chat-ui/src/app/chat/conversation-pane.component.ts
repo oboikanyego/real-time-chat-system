@@ -1,10 +1,12 @@
 import { DatePipe } from '@angular/common';
-import { Component, ElementRef, Injector, afterNextRender, computed, effect, inject, input, signal, viewChild } from '@angular/core';
+import { Component, DestroyRef, ElementRef, HostListener, Injector, afterNextRender, computed, effect, inject, input, signal, viewChild } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { RouterLink } from '@angular/router';
 import { AuthService } from '../core/auth.service';
 import { Conversation, ConversationService } from '../core/conversation.service';
 import { ChatMessage, MessageService } from '../core/message.service';
+import { idAtOrBefore, lastSeenLabel } from '../core/time';
+import { TypingService } from '../core/typing.service';
 import { AvatarComponent } from '../shared/avatar.component';
 
 const NEAR_BOTTOM_PX = 120;
@@ -21,14 +23,32 @@ export class ConversationPaneComponent {
   private readonly conversations = inject(ConversationService);
   private readonly messageStore = inject(MessageService);
   private readonly injector = inject(Injector);
+  private readonly typingService = inject(TypingService);
   private readonly me = inject(AuthService).profile;
 
   readonly id = input<string>();
 
   protected readonly scroller = viewChild<ElementRef<HTMLElement>>('scroller');
   protected readonly state = signal<'idle' | 'loading' | 'ready' | 'missing'>('idle');
-  protected readonly conversation = signal<Conversation | null>(null);
+  /** Only used for a conversation that is not in the list (e.g. a deep link); the list copy is the live one. */
+  private readonly fetched = signal<Conversation | null>(null);
+  protected readonly conversation = computed(
+    () => this.conversations.conversations().find((c) => c.id === this.id()) ?? this.fetched()
+  );
   protected draft = '';
+
+  /** Whether the user can actually see the page; read receipts are only sent then. */
+  private readonly active = signal(document.visibilityState === 'visible' && document.hasFocus());
+  private readonly now = signal(new Date());
+
+  protected readonly subtitle = computed(() => {
+    const c = this.conversation();
+    if (!c) return { text: '', kind: 'none' as const };
+    if (this.typingService.isTyping(c.id)) return { text: 'typing…', kind: 'typing' as const };
+    const p = c.participant.presence;
+    if (!p) return { text: '', kind: 'none' as const };
+    return p.online ? { text: 'Online', kind: 'online' as const } : { text: lastSeenLabel(p.lastSeenAt, this.now()), kind: 'offline' as const };
+  });
 
   protected readonly thread = computed(() => {
     const id = this.id();
@@ -36,20 +56,39 @@ export class ConversationPaneComponent {
   });
   protected readonly messages = computed(() => this.thread()?.messages ?? []);
 
+  @HostListener('document:visibilitychange')
+  @HostListener('window:focus')
+  @HostListener('window:blur')
+  protected updateActive(): void {
+    this.active.set(document.visibilityState === 'visible' && document.hasFocus());
+  }
+
   constructor() {
+    const ticker = setInterval(() => this.now.set(new Date()), 30_000);
+    inject(DestroyRef).onDestroy(() => {
+      clearInterval(ticker);
+      this.stopTyping();
+    });
+
+    // Report messages as read while the conversation is on screen and the page is in view.
+    effect(() => {
+      const id = this.id();
+      if (id && this.state() === 'ready' && this.active()) this.messageStore.markRead(id);
+    });
+
     effect(() => {
       const id = this.id();
       this.draft = '';
       if (!id) {
         this.state.set('idle');
-        this.conversation.set(null);
+        this.fetched.set(null);
         return;
       }
       this.state.set('loading');
       void this.conversations.get(id).then((found) => {
         // Ignore a response for a conversation the user has already navigated away from.
         if (this.id() !== id) return;
-        this.conversation.set(found);
+        this.fetched.set(found);
         this.state.set(found ? 'ready' : 'missing');
         if (found) {
           void this.messageStore.loadLatest(id).then(() => this.scrollToBottom());
@@ -76,12 +115,33 @@ export class ConversationPaneComponent {
     return m.senderId === this.me()?.id;
   }
 
+  /** Delivery state of a message I sent, from the other person's receipt cursors. */
+  protected receipt(m: ChatMessage): 'sent' | 'delivered' | 'read' {
+    const r = this.conversation()?.peerReceipts;
+    if (idAtOrBefore(m.id, r?.readUpTo ?? null)) return 'read';
+    if (idAtOrBefore(m.id, r?.deliveredUpTo ?? null)) return 'delivered';
+    return 'sent';
+  }
+
   protected submit(event?: Event): void {
     event?.preventDefault();
     const id = this.id();
     if (!id || !this.draft.trim()) return;
     this.messageStore.send(id, this.draft);
     this.draft = '';
+    this.stopTyping();
+  }
+
+  protected onInput(): void {
+    const id = this.id();
+    if (!id) return;
+    if (this.draft.trim()) this.typingService.notifyTyping(id);
+    else this.typingService.stopTyping(id);
+  }
+
+  protected stopTyping(): void {
+    const id = this.id();
+    if (id) this.typingService.stopTyping(id);
   }
 
   protected onEnter(event: Event): void {

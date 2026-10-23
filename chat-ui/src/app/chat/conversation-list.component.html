@@ -12,11 +12,18 @@
     @for (c of store.conversations(); track c.id) {
       <li>
         <a [routerLink]="['/chat', c.id]" routerLinkActive="active" class="row">
-          <app-avatar [name]="c.participant.displayName" [photoURL]="c.participant.photoURL" />
+          <app-avatar [name]="c.participant.displayName" [photoURL]="c.participant.photoURL" [online]="!!c.participant.presence?.online" />
           <span class="text">
-            <span class="name">{{ c.participant.displayName }}</span>
-            <span class="preview">{{ c.lastMessage?.text || 'No messages yet' }}</span>
+            <span class="name" [class.unread]="c.unreadCount > 0">{{ c.participant.displayName }}</span>
+            @if (typing.isTyping(c.id)) {
+              <span class="preview typing">typing…</span>
+            } @else {
+              <span class="preview" [class.unread]="c.unreadCount > 0">{{ c.lastMessage?.text || 'No messages yet' }}</span>
+            }
           </span>
+          @if (c.unreadCount > 0) {
+            <span class="badge" [attr.aria-label]="c.unreadCount + ' unread messages'">{{ badge(c.unreadCount) }}</span>
+          }
         </a>
       </li>
     }
