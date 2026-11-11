@@ -1,0 +1,50 @@
+name: Publish genuine portfolio screenshot evidence (temporary)
+on:
+  push:
+    branches:
+      - chore/showcase-evidence-20261111
+
+permissions:
+  contents: write
+
+jobs:
+  capture:
+    if: "!contains(github.event.head_commit.message, '[evidence committed]')"
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Install Chromium for real website screenshots
+        run: npx --yes playwright@1.56.1 install --with-deps chromium
+      - name: Build actual chat foundation code
+        run: |
+          npm install --prefix chat-ui --no-audit --no-fund
+          npm run build --prefix chat-ui
+      - name: Serve chat scaffold locally without Firebase credentials
+        run: |
+          python3 -m http.server 4100 --directory chat-ui/dist/chat-ui/browser >/tmp/chat-capture-server.log 2>&1 &
+          sleep 2
+          curl -f http://127.0.0.1:4100/ >/dev/null
+      - name: Capture three real implemented interfaces
+        run: |
+          set -euo pipefail
+          mkdir -p .evidence/showcase
+          PW="npx --yes playwright@1.56.1 screenshot --browser chromium"
+          $PW --viewport-size="1200,750" --wait-for-timeout=7500 "https://portfolio-risk-monitor.netlify.app/" .evidence/showcase/risk-dashboard-desktop.png
+          $PW --viewport-size="390,844" --wait-for-timeout=6500 "https://portfolio-risk-monitor.netlify.app/" .evidence/showcase/risk-dashboard-mobile.png
+          $PW --viewport-size="1200,750" --wait-for-timeout=1400 "http://127.0.0.1:4100/" .evidence/showcase/chat-foundation-desktop.png
+          $PW --viewport-size="390,844" --wait-for-timeout=1400 "http://127.0.0.1:4100/" .evidence/showcase/chat-foundation-mobile.png
+          $PW --viewport-size="1200,750" --wait-for-timeout=4500 "https://freelance-services-platform.netlify.app/login" .evidence/showcase/freelance-auth-desktop.png
+          $PW --viewport-size="390,844" --wait-for-timeout=3500 "https://freelance-services-platform.netlify.app/login" .evidence/showcase/freelance-auth-mobile.png
+          file .evidence/showcase/*.png
+          for image in .evidence/showcase/*.png; do test $(wc -c < "$image") -gt 7000; done
+      - name: Commit screenshots only on temporary public evidence branch
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add .evidence/showcase/
+          git commit -m 'chore: actual public and local prototype screenshots [evidence committed]'
+          git push origin HEAD:chore/showcase-evidence-20261111
