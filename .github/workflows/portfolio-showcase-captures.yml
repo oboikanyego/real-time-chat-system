@@ -18,7 +18,7 @@ jobs:
         with:
           node-version: '22'
       - name: Install Chromium for real website screenshots
-        run: npx --yes playwright@1.56.1 install --with-deps chromium
+        run: npx --yes playwright@1.63.0 install --with-deps chromium
       - name: Build actual chat foundation code
         run: |
           npm install --prefix chat-ui --no-audit --no-fund
@@ -32,7 +32,7 @@ jobs:
         run: |
           set -euo pipefail
           mkdir -p .evidence/showcase
-          PW="npx --yes playwright@1.56.1 screenshot --browser chromium"
+          PW="npx --yes playwright@1.63.0 screenshot --browser chromium"
           $PW --viewport-size="1200,750" --wait-for-timeout=7500 "https://portfolio-risk-monitor.netlify.app/" .evidence/showcase/risk-dashboard-desktop.png
           $PW --viewport-size="390,844" --wait-for-timeout=6500 "https://portfolio-risk-monitor.netlify.app/" .evidence/showcase/risk-dashboard-mobile.png
           $PW --viewport-size="1200,750" --wait-for-timeout=1400 "http://127.0.0.1:4100/" .evidence/showcase/chat-foundation-desktop.png
